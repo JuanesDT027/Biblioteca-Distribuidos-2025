@@ -1,66 +1,82 @@
-# ps_interactivo.py
+# menu_interactivo.py
 import zmq
 import json
 import time
+from tabulate import tabulate
+from colorama import init, Fore, Style
+
+# Inicializar colorama
+init(autoreset=True)
 
 # Configuración ZMQ
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")  # puerto del GC
+socket.connect("tcp://localhost:5555")  # puerto del Gestor de Carga
 
 solicitudes = []
 
+# Función para cargar archivo de solicitudes
 def cargar_archivo():
     global solicitudes
-    archivo = input("Ingrese el nombre del archivo con solicitudes: ")
+    archivo = input(Fore.CYAN + "Ingrese el nombre del archivo con solicitudes: " + Style.RESET_ALL)
     try:
         with open(archivo, "r", encoding="utf-8") as f:
             solicitudes = [json.loads(line.strip()) for line in f if line.strip()]
-        print(f"✅ {len(solicitudes)} solicitudes cargadas.")
+        print(Fore.GREEN + f"✅ {len(solicitudes)} solicitudes cargadas." + Style.RESET_ALL)
     except FileNotFoundError:
-        print("⚠️ Archivo no encontrado.")
+        print(Fore.RED + "⚠️ Archivo no encontrado." + Style.RESET_ALL)
     except json.JSONDecodeError as e:
-        print(f"⚠️ Error leyendo archivo: {e}")
+        print(Fore.RED + f"⚠️ Error leyendo archivo: {e}" + Style.RESET_ALL)
 
+# Función para enviar todas las solicitudes cargadas
 def enviar_solicitudes():
     if not solicitudes:
-        print("⚠️ No hay solicitudes cargadas.")
+        print(Fore.YELLOW + "⚠️ No hay solicitudes cargadas." + Style.RESET_ALL)
         return
     for i, solicitud in enumerate(solicitudes, start=1):
-        print(f"[{i}] Enviando {solicitud['operacion']} para {solicitud['codigo']}...")
+        print(Fore.BLUE + f"[{i}] Enviando {solicitud['operacion']} para {solicitud['codigo']}..." + Style.RESET_ALL)
         socket.send_json(solicitud)
         respuesta = socket.recv_json()
-        print("Respuesta del GC:", respuesta)
-        time.sleep(0.3)  # opcional
+        print(Fore.GREEN + f"📨 Respuesta del GC: {respuesta}" + Style.RESET_ALL)
+        time.sleep(0.3)
 
+# Función para operación manual
 def operacion_manual():
-    operacion = input("Tipo de operación (devolucion/renovacion/prestamo): ").strip()
-    codigo = input("Código del libro: ").strip()
+    operacion = input(Fore.CYAN + "Tipo de operación (devolucion/renovacion/prestamo): " + Style.RESET_ALL).strip()
+    codigo = input(Fore.CYAN + "Código del libro: " + Style.RESET_ALL).strip()
     solicitud = {"operacion": operacion, "codigo": codigo}
     socket.send_json(solicitud)
     respuesta = socket.recv_json()
-    print("Respuesta del GC:", respuesta)
+    print(Fore.GREEN + f"📨 Respuesta del GC: {respuesta}" + Style.RESET_ALL)
+
+# Función para mostrar menú bonito
+def mostrar_menu():
+    menu = [
+        ["1", "Cargar archivo de solicitudes"],
+        ["2", "Enviar todas las solicitudes cargadas"],
+        ["3", "Realizar operación manual"],
+        ["4", "Salir"]
+    ]
+    print(Fore.MAGENTA + "\n=== Menú del Proceso Solicitante ===" + Style.RESET_ALL)
+    print(tabulate(menu, headers=["Opción", "Descripción"], tablefmt="fancy_grid"))
 
 # Menú principal
-while True:
-    print("\n=== Menú del Proceso Solicitante ===")
-    print("1. Cargar archivo de solicitudes")
-    print("2. Enviar todas las solicitudes cargadas")
-    print("3. Realizar operación manual")
-    print("4. Salir")
-    opcion = input("Seleccione una opción: ").strip()
+def menu_principal():
+    while True:
+        mostrar_menu()
+        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        if opcion == "1":
+            cargar_archivo()
+        elif opcion == "2":
+            enviar_solicitudes()
+        elif opcion == "3":
+            operacion_manual()
+        elif opcion == "4":
+            print(Fore.CYAN + "Saliendo..." + Style.RESET_ALL)
+            break
+        else:
+            print(Fore.RED + "⚠️ Opción inválida." + Style.RESET_ALL)
 
-    if opcion == "1":
-        cargar_archivo()
-    elif opcion == "2":
-        enviar_solicitudes()
-    elif opcion == "3":
-        operacion_manual()
-    elif opcion == "4":
-        print("Saliendo...")
-        break
-    else:
-        print("⚠️ Opción inválida.")
-
+# Ejecutar menú principal
 if __name__ == "__main__":
-        menu_principal()
+    menu_principal()
