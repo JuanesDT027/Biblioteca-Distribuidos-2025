@@ -42,7 +42,7 @@ def enviar_solicitudes():
             print(Fore.RED + f"⚠️ Error comunicándose con el GC: {e}" + Style.RESET_ALL)
         time.sleep(0.3)
 
-# Función para operación manual con selección mediante tabla
+# Función para operación manual con validación
 def operacion_manual():
     operaciones = [
         ["1", "Devolucion"],
@@ -52,6 +52,7 @@ def operacion_manual():
     print(Fore.MAGENTA + "\n=== Seleccione la operación ===" + Style.RESET_ALL)
     print(tabulate(operaciones, headers=["Opción", "Operación"], tablefmt="fancy_grid"))
 
+    # Selección de operación
     while True:
         opcion = input(Fore.YELLOW + "Seleccione el número de la operación: " + Style.RESET_ALL).strip()
         if opcion not in ["1", "2", "3"]:
@@ -60,20 +61,27 @@ def operacion_manual():
         operacion = operaciones[int(opcion)-1][1].lower()
         break
 
+    # Solicitar código hasta que sea válido
     while True:
         codigo = input(Fore.CYAN + "Código del libro: " + Style.RESET_ALL).strip()
         if not codigo:
             print(Fore.RED + "⚠️ Código vacío. Intente nuevamente." + Style.RESET_ALL)
             continue
-        break
 
-    solicitud = {"operacion": operacion, "codigo": codigo}
-    socket.send_json(solicitud)
-    try:
-        respuesta = socket.recv_json()
-        print(Fore.GREEN + f"📨 Respuesta del GC: {respuesta}" + Style.RESET_ALL)
-    except zmq.ZMQError as e:
-        print(Fore.RED + f"⚠️ Error comunicándose con el GC: {e}" + Style.RESET_ALL)
+        solicitud = {"operacion": operacion, "codigo": codigo}
+        socket.send_json(solicitud)
+
+        try:
+            respuesta = socket.recv_json()
+            if respuesta.get("status") == "error" and "no existe" in respuesta.get("msg", ""):
+                print(Fore.RED + f"⚠️ {respuesta['msg']}. Intente nuevamente." + Style.RESET_ALL)
+                continue
+            else:
+                print(Fore.GREEN + f"📨 Respuesta del GC: {respuesta}" + Style.RESET_ALL)
+                break
+        except zmq.ZMQError as e:
+            print(Fore.RED + f"⚠️ Error comunicándose con el GC: {e}" + Style.RESET_ALL)
+            break
 
 # Función para mostrar menú principal bonito
 def mostrar_menu():

@@ -1,8 +1,8 @@
-# gestor_carga/gestor_carga.py
 import time
 import zmq
 import json
 from datetime import datetime, timedelta
+from common.LibroUsuario import LibroUsuario
 
 # Contexto ZMQ
 context = zmq.Context()
@@ -11,14 +11,12 @@ context = zmq.Context()
 rep_socket = context.socket(zmq.REP)
 rep_socket.bind("tcp://*:5555")
 
-
 time.sleep(1)
 # Socket PUB para notificar a los actores
 pub_socket = context.socket(zmq.PUB)
 pub_socket.bind("tcp://*:5556")  
 
-# BD simulada (puedes leer desde libros.txt)
-from common.LibroUsuario import LibroUsuario
+# BD simulada
 libros = {}  # Diccionario: clave=codigo, valor=LibroUsuario
 
 def cargar_libros():
@@ -45,38 +43,37 @@ while True:
     libro = libros.get(codigo)
     print("Operación recibida:", operacion)
 
-    
+    # Devolución
     if operacion == "devolucion" and libro:
         libro.prestado = False
         libro.ejemplares_disponibles += 1
         rep_socket.send_json({"status": "ok", "msg": "Devolución recibida"})
-        
-        # Publicar a los actores
         pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
-    
+
+    # Renovación
     elif operacion == "renovacion" and libro:
         nueva_fecha = datetime.now() + timedelta(weeks=1)
         rep_socket.send_json({"status": "ok", "msg": f"Renovación hasta {nueva_fecha}"})
-        
         pub_socket.send_string(
             f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
         )
-        
+
+    # Préstamo
     elif operacion == "prestamo" and libro:
-        # Enviar solicitud al Actor de Préstamo (5557)
         try:
             prestamo_socket = context.socket(zmq.REQ)
             prestamo_socket.connect("tcp://localhost:5557")
-
-            # Enviar solicitud de préstamo al actor
             prestamo_socket.send_json({"codigo": codigo})
-
-            # Esperar respuesta del actor
             respuesta = prestamo_socket.recv_json()
-            rep_socket.send_json(respuesta)  # reenviar al PS
-
-            print("📨 Respuesta del Actor de Préstamo:", respuesta["msg"])
+            rep_socket.send_json(respuesta)
             prestamo_socket.close()
-
+            print("📨 Respuesta del Actor de Préstamo:", respuesta["msg"])
         except Exception as e:
             rep_socket.send_json({"status": "error", "msg": f"Error comunicando con actor de préstamo: {e}"})
+
+    # Código de libro inválido o operación inválida
+    else:
+        rep_socket.send_json({
+            "status": "error",
+            "msg": f"Operación inválida o libro con código '{codigo}' no existe"
+        })
