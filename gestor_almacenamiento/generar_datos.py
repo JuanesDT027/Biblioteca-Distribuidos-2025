@@ -1,11 +1,11 @@
 import sys
 import os
+from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import json
 import random
 from common.LibroUsuario import LibroUsuario
-
 
 # Creamos una lista para los libros
 libros = []
@@ -21,9 +21,11 @@ for i in range(1, 1001):
     if (i <= 50 and sede == "SedeA") or (i > 850 and sede == "SedeB"):
         prestado = True
         ejemplares_disponibles = max(0, ejemplares - 1)
+        fecha_entrega = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
     else:
         prestado = False
         ejemplares_disponibles = ejemplares
+        fecha_entrega = None
 
     libro = LibroUsuario(
         codigo=f"L{i:04d}",
@@ -31,7 +33,8 @@ for i in range(1, 1001):
         autor=autor,
         sede=sede,
         ejemplares_disponibles=ejemplares_disponibles,
-        prestado=prestado
+        prestado=prestado,
+        fecha_entrega=fecha_entrega
     )
     libros.append(libro.to_dict())
 

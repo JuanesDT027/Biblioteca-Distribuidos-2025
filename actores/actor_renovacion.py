@@ -21,20 +21,20 @@ while True:
     # Recibir mensaje como string y separar tópico del contenido
     mensaje_raw = sub_socket.recv_string()
     topico, contenido = mensaje_raw.split(" ", 1)
-    
+
     # Parsear el JSON del contenido
     data = json.loads(contenido)
-    libro_data = data["libro"]
-    fecha_nueva = data["fecha_nueva"]
-    
+    libro_data = data.get("libro")
+    fecha_nueva = data.get("fecha_nueva")
+
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
         libro = libros.get(codigo)
         if libro:
             libro.fecha_entrega = fecha_nueva
             print(f"Libro {libro.titulo} renovado hasta {fecha_nueva}.")
-            
+
             # Guardar cambios en archivo
-            with open("data/libros.txt", "w") as f:
+            with open("data/libros.txt", "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
