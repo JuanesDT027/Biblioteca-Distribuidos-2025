@@ -22,17 +22,17 @@ from common.LibroUsuario import LibroUsuario
 libros = {}  # Diccionario: clave=codigo, valor=LibroUsuario
 
 def cargar_libros():
-    with open("data/libros.txt", "r") as f:
+    with open("data/libros.txt", "r", encoding="utf-8") as f:
         for line in f:
-            data = json.loads(line)
-            libros[data["codigo"]] = LibroUsuario(
-                data["codigo"],
-                data["titulo"],
-                data["autor"],
-                data["sede"],
-                data["ejemplares_disponibles"],
-                data["prestado"]
-            )
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                libros[data["codigo"]] = LibroUsuario(**data)
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Error leyendo línea: {line}")
+                print(e)
 
 cargar_libros()
 print("✅ Gestor de Carga iniciado, esperando solicitudes...")

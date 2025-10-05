@@ -1,13 +1,15 @@
-# actores/actor_prestamo.py
 import zmq
 import json
 from common.LibroUsuario import LibroUsuario
 
+# Contexto ZMQ
 context = zmq.Context()
+
+# Socket REP para atender solicitudes del Gestor de Carga
 rep_socket = context.socket(zmq.REP)
 rep_socket.bind("tcp://*:5557")  # puerto exclusivo para préstamos
 
-# Cargar BD
+# Cargar BD simulada desde archivo
 libros = {}
 with open("data/libros.txt", "r") as f:
     for line in f:
@@ -17,6 +19,7 @@ with open("data/libros.txt", "r") as f:
 print("✅ Actor Préstamo iniciado y escuchando...")
 
 while True:
+    # Recibir solicitud de préstamo
     mensaje = rep_socket.recv_json()
     codigo = mensaje.get("codigo")
     libro = libros.get(codigo)
@@ -24,12 +27,12 @@ while True:
     if libro and libro.ejemplares_disponibles > 0:
         libro.ejemplares_disponibles -= 1
         libro.prestado = True
-        rep_socket.send_json({"status": "ok"})
+        rep_socket.send_json({"status": "ok", "msg": f"Préstamo autorizado para {libro.titulo}"})
         print(f"Préstamo autorizado para {libro.titulo}.")
     else:
-        rep_socket.send_json({"status": "error"})
+        rep_socket.send_json({"status": "error", "msg": f"Préstamo DENEGADO para código {codigo}"})
         print(f"Préstamo DENEGADO para código {codigo}.")
-    
+
     # Guardar cambios en archivo
     with open("data/libros.txt", "w") as f:
         for l in libros.values():

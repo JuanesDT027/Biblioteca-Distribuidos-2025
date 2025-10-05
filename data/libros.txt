@@ -61,7 +61,7 @@
 {"codigo": "L0061", "titulo": "Libro 61", "autor": "Autor 181", "sede": "SedeA", "ejemplares_disponibles": 4, "prestado": false}
 {"codigo": "L0062", "titulo": "Libro 62", "autor": "Autor 192", "sede": "SedeA", "ejemplares_disponibles": 2, "prestado": false}
 {"codigo": "L0063", "titulo": "Libro 63", "autor": "Autor 168", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
-{{"codigo": "L0064", "titulo": "Libro 64", "autor": "Autor 192", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
+{"codigo": "L0064", "titulo": "Libro 64", "autor": "Autor 192", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
 {"codigo": "L0065", "titulo": "Libro 65", "autor": "Autor 77", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
 {"codigo": "L0066", "titulo": "Libro 66", "autor": "Autor 160", "sede": "SedeA", "ejemplares_disponibles": 5, "prestado": false}
 {"codigo": "L0067", "titulo": "Libro 67", "autor": "Autor 5", "sede": "SedeA", "ejemplares_disponibles": 2, "prestado": false}
@@ -123,7 +123,8 @@
 {"codigo": "L0123", "titulo": "Libro 123", "autor": "Autor 224", "sede": "SedeA", "ejemplares_disponibles": 2, "prestado": false}
 {"codigo": "L0124", "titulo": "Libro 124", "autor": "Autor 71", "sede": "SedeA", "ejemplares_disponibles": 3, "prestado": false}
 {"codigo": "L0125", "titulo": "Libro 125", "autor": "Autor 74", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
-{"codigo": "L0126", "titulo": "Libro 126", "autor": "Autor 40", "sede": "SedeA", "ejemplares_disponibles": 5, "prestado": false}{{"codigo": "L0127", "titulo": "Libro 127", "autor": "Autor 184", "sede": "SedeA", "ejemplares_disponibles": 3, "prestado": false}
+{"codigo": "L0126", "titulo": "Libro 126", "autor": "Autor 40", "sede": "SedeA", "ejemplares_disponibles": 5, "prestado": false}
+{"codigo": "L0127", "titulo": "Libro 127", "autor": "Autor 184", "sede": "SedeA", "ejemplares_disponibles": 3, "prestado": false}
 {"codigo": "L0128", "titulo": "Libro 128", "autor": "Autor 72", "sede": "SedeA", "ejemplares_disponibles": 3, "prestado": false}
 {"codigo": "L0129", "titulo": "Libro 129", "autor": "Autor 163", "sede": "SedeA", "ejemplares_disponibles": 1, "prestado": false}
 {"codigo": "L0130", "titulo": "Libro 130", "autor": "Autor 149", "sede": "SedeA", "ejemplares_disponibles": 4, "prestado": false}
@@ -997,3 +998,4 @@
 {"codigo": "L0998", "titulo": "Libro 998", "autor": "Autor 169", "sede": "SedeB", "ejemplares_disponibles": 0, "prestado": true}
 {"codigo": "L0999", "titulo": "Libro 999", "autor": "Autor 275", "sede": "SedeB", "ejemplares_disponibles": 4, "prestado": true}
 {"codigo": "L1000", "titulo": "Libro 1000", "autor": "Autor 296", "sede": "SedeB", "ejemplares_disponibles": 2, "prestado": true}
+
