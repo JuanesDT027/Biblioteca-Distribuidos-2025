@@ -1,15 +1,13 @@
-# actores/actor_devolucion.py
 import zmq
 import json
 from common.LibroUsuario import LibroUsuario
 
-# Configurar socket SUB
 context = zmq.Context()
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://localhost:5556")  # mismo puerto que PUB del GC
+sub_socket.connect("tcp://localhost:5556")
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Devolucion")
 
-# Cargar BD simulada desde archivo
+# Cargar BD
 libros = {}
 with open("data/libros.txt", "r") as f:
     for line in f:
@@ -19,11 +17,11 @@ with open("data/libros.txt", "r") as f:
 print("✅ Actor Devolución iniciado y escuchando...")
 
 while True:
-    mensaje_raw = sub_socket.recv_json()
-    topico = mensaje_raw.get("topico")
-    libro_data = mensaje_raw.get("libro")
+    mensaje_raw = sub_socket.recv_string()
+    topico, contenido = mensaje_raw.split(" ", 1)
+    libro_data = json.loads(contenido)
     
-    if topico == "Devolucion" and libro_data:
+    if topico == "Devolucion":
         codigo = libro_data["codigo"]
         libro = libros.get(codigo)
         if libro:

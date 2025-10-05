@@ -1,4 +1,5 @@
 # gestor_carga/gestor_carga.py
+import time
 import zmq
 import json
 from datetime import datetime, timedelta
@@ -10,6 +11,8 @@ context = zmq.Context()
 rep_socket = context.socket(zmq.REP)
 rep_socket.bind("tcp://*:5555")
 
+
+time.sleep(1)
 # Socket PUB para notificar a los actores
 pub_socket = context.socket(zmq.PUB)
 pub_socket.bind("tcp://*:5556")  
@@ -49,19 +52,16 @@ while True:
         rep_socket.send_json({"status": "ok", "msg": "Devolución recibida"})
         
         # Publicar a los actores
-        pub_socket.send_json({"topico": "Devolucion", "libro": libro.to_dict()})
+        pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
     
     elif operacion == "renovacion" and libro:
-        # Solo permitir hasta 2 renovaciones
         nueva_fecha = datetime.now() + timedelta(weeks=1)
         rep_socket.send_json({"status": "ok", "msg": f"Renovación hasta {nueva_fecha}"})
         
-        pub_socket.send_json({
-            "topico": "Renovacion",
-            "libro": libro.to_dict(),
-            "fecha_nueva": str(nueva_fecha)
-        })
-    
+        pub_socket.send_string(
+            f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
+        )
+        
     elif operacion == "prestamo" and libro:
         if libro.ejemplares_disponibles > 0:
             libro.ejemplares_disponibles -= 1
