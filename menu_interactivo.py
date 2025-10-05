@@ -83,13 +83,38 @@ def operacion_manual():
             print(Fore.RED + f"⚠️ Error comunicándose con el GC: {e}" + Style.RESET_ALL)
             break
 
+# Función para consultar disponibilidad de un libro
+def consultar_disponibilidad():
+    while True:
+        codigo = input(Fore.CYAN + "Ingrese el código del libro: " + Style.RESET_ALL).strip()
+        if not codigo:
+            print(Fore.RED + "⚠️ Código vacío. Intente nuevamente." + Style.RESET_ALL)
+            continue
+
+        solicitud = {"operacion": "disponibilidad", "codigo": codigo}
+        socket.send_json(solicitud)
+
+        try:
+            respuesta = socket.recv_json()
+            if respuesta.get("status") == "error":
+                print(Fore.RED + f"⚠️ {respuesta['msg']}" + Style.RESET_ALL)
+                continue
+            else:
+                ejemplares = respuesta.get("ejemplares_disponibles", 0)
+                print(Fore.GREEN + f"📚 El libro {codigo} tiene {ejemplares} ejemplares disponibles." + Style.RESET_ALL)
+                break
+        except zmq.ZMQError as e:
+            print(Fore.RED + f"⚠️ Error comunicándose con el GC: {e}" + Style.RESET_ALL)
+            break
+
 # Función para mostrar menú principal bonito
 def mostrar_menu():
     menu = [
         ["1", "Cargar archivo de solicitudes"],
         ["2", "Enviar todas las solicitudes cargadas"],
         ["3", "Realizar operación manual"],
-        ["4", "Salir"]
+        ["4", "Consultar disponibilidad de un libro"],
+        ["5", "Salir"]
     ]
     print(Fore.MAGENTA + "\n=== Menú del Proceso Solicitante ===" + Style.RESET_ALL)
     print(tabulate(menu, headers=["Opción", "Descripción"], tablefmt="fancy_grid"))
@@ -106,6 +131,8 @@ def menu_principal():
         elif opcion == "3":
             operacion_manual()
         elif opcion == "4":
+            consultar_disponibilidad()
+        elif opcion == "5":
             print(Fore.CYAN + "Saliendo..." + Style.RESET_ALL)
             break
         else:

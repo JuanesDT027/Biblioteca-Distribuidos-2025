@@ -71,6 +71,14 @@ while True:
         except Exception as e:
             rep_socket.send_json({"status": "error", "msg": f"Error comunicando con actor de préstamo: {e}"})
 
+   # **Nueva operación: consultar disponibilidad**
+    elif operacion == "disponibilidad" and libro:
+        rep_socket.send_json({
+            "status": "ok",
+            "ejemplares_disponibles": libro.ejemplares_disponibles,
+            "codigo": libro.codigo,
+            "titulo": libro.titulo
+        })
     # Código de libro inválido o operación inválida
     else:
         rep_socket.send_json({
