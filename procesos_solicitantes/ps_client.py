@@ -9,8 +9,7 @@ from LibroUsuario import LibroUsuario
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")  # Usa localhost si estás probando en tu PC
-
+socket.connect("tcp://10.43.102.150:5555") 
 def devolverLibro():
     libro = LibroUsuario("001", "El Principito", "Antoine de Saint-Exupéry", "Bogotá")
     mensaje = {"operacion": "devolver", "libro_usuario": libro.to_dict(), "timestamp": time.time()}
