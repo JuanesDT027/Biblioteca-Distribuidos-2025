@@ -63,12 +63,20 @@ while True:
         )
         
     elif operacion == "prestamo" and libro:
-        if libro.ejemplares_disponibles > 0:
-            libro.ejemplares_disponibles -= 1
-            libro.prestado = True
-            rep_socket.send_json({"status": "ok", "msg": "Préstamo autorizado 2 semanas"})
-        else:
-            rep_socket.send_json({"status": "error", "msg": "Libro no disponible"})
-    
-    else:
-        rep_socket.send_json({"status": "error", "msg": "Operación desconocida o libro no encontrado"})
+        # Enviar solicitud al Actor de Préstamo (5557)
+        try:
+            prestamo_socket = context.socket(zmq.REQ)
+            prestamo_socket.connect("tcp://localhost:5557")
+
+            # Enviar solicitud de préstamo al actor
+            prestamo_socket.send_json({"codigo": codigo})
+
+            # Esperar respuesta del actor
+            respuesta = prestamo_socket.recv_json()
+            rep_socket.send_json(respuesta)  # reenviar al PS
+
+            print("📨 Respuesta del Actor de Préstamo:", respuesta["msg"])
+            prestamo_socket.close()
+
+        except Exception as e:
+            rep_socket.send_json({"status": "error", "msg": f"Error comunicando con actor de préstamo: {e}"})

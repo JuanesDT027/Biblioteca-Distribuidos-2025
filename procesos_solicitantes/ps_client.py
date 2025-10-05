@@ -3,7 +3,7 @@ import json
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")  # puerto donde corre GC
+socket.connect("tcp://10.43.102.150:5555")  # puerto donde corre GC
 
 operaciones = [
     {"operacion": "devolucion", "codigo": "L0010"},
