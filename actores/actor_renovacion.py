@@ -46,7 +46,8 @@ while True:
             libro = LibroUsuario(**respuesta["libro"])
 
             # Calcular la nueva fecha de entrega (+7 días desde hoy)
-            nueva_fecha = datetime.now() + timedelta(days=7)
+            fecha_actual = datetime.now()
+            nueva_fecha = fecha_actual + timedelta(days=7)
             fecha_nueva_str = nueva_fecha.strftime("%d/%m/%Y")
 
             # Breve pausa antes del segundo envío
