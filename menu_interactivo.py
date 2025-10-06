@@ -119,6 +119,7 @@ def mostrar_menu():
     print(Fore.MAGENTA + "\n=== Menú del Proceso Solicitante ===" + Style.RESET_ALL)
     print(tabulate(menu, headers=["Opción", "Descripción"], tablefmt="fancy_grid"))
 
+
 # Menú principal
 def menu_principal():
     while True:
