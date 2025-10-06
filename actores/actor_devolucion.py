@@ -3,53 +3,42 @@ import json
 import time
 from common.LibroUsuario import LibroUsuario
 
-# Crear contexto y sockets
 context = zmq.Context()
 
-# Socket SUB (recibe publicaciones del Gestor de Carga - GC)
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://localhost:5556")  # Puerto del GC (PUB)
+sub_socket.connect("tcp://localhost:5556")  # GC (PUB)
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Devolucion")
 
-# Socket REQ (comunica con el Gestor de Almacenamiento - GA)
 ga_socket = context.socket(zmq.REQ)
-ga_socket.connect("tcp://localhost:5560")  # Puerto del GA
-ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
+ga_socket.connect("tcp://localhost:5560")  # GA
+ga_socket.RCVTIMEO = 5000
 
-print("✅ Actor Devolución iniciado y conectado al Gestor de Almacenamiento (GA)...")
+print("✅ Actor Devolución conectado al Gestor de Almacenamiento (GA)...")
 
 while True:
-    # Esperar mensaje del GC
     mensaje_raw = sub_socket.recv_string()
     topico, contenido = mensaje_raw.split(" ", 1)
     libro_data = json.loads(contenido)
 
     if topico == "Devolucion":
         codigo = libro_data.get("codigo")
+        print(f"\n📗 Devolución recibida → {codigo}")
 
-        print(f"\n📥 Mensaje recibido del GC → Devolución de {codigo}")
-        print(f"🔎 Solicitando datos del libro {codigo} al GA...")
-
-        # 1️⃣ Leer datos del libro desde GA
+        # Leer datos del GA
         ga_socket.send_json({"operacion": "leer", "codigo": codigo})
         try:
             respuesta = ga_socket.recv_json()
-            print("📘 Respuesta del GA (leer):", respuesta)
         except zmq.Again:
-            print("⚠️ Tiempo de espera excedido al leer datos del GA.")
+            print("⚠️ GA no respondió (lectura).")
             continue
 
         if respuesta["status"] == "ok":
             libro = LibroUsuario(**respuesta["libro"])
-
-            # Actualizar atributos para devolución
             libro.prestado = False
             libro.ejemplares_disponibles += 1
             libro.fecha_entrega = None
 
-            time.sleep(0.3)  # Pausa breve antes de enviar actualización
-
-            print(f"✏️ Actualizando disponibilidad de '{libro.titulo}' en el GA...")
+            time.sleep(0.2)
             ga_socket.send_json({
                 "operacion": "actualizar",
                 "codigo": codigo,
@@ -61,13 +50,12 @@ while True:
             })
 
             try:
-                resp_actualizar = ga_socket.recv_json()
-                print("📤 Respuesta del GA (actualizar):", resp_actualizar)
-                if resp_actualizar["status"] == "ok":
-                    print(f"✅ Libro '{libro.titulo}' devuelto correctamente y actualizado en GA.")
+                resp = ga_socket.recv_json()
+                if resp["status"] == "ok":
+                    print(f"✅ Libro '{libro.titulo}' devuelto correctamente.")
                 else:
-                    print(f"⚠️ Error al actualizar: {resp_actualizar['msg']}")
+                    print(f"⚠️ Error en actualización: {resp['msg']}")
             except zmq.Again:
-                print("⚠️ Tiempo de espera excedido al comunicar con el GA durante la actualización.")
+                print("⚠️ GA no respondió (actualización).")
         else:
-            print(f"❌ Libro con código {codigo} no encontrado en el GA.")
+            print(f"❌ Libro {codigo} no encontrado en GA.")

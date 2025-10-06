@@ -7,11 +7,9 @@ from common.LibroUsuario import LibroUsuario
 ARCHIVO_PRINCIPAL = "data/libros.txt"
 LOCK = threading.Lock()
 
-# Crear contexto y socket REP
 context = zmq.Context()
 socket = context.socket(zmq.REP)
-socket.bind("tcp://*:5560")  # Puerto exclusivo para GA
-
+socket.bind("tcp://*:5560")
 
 libros = {}
 if os.path.exists(ARCHIVO_PRINCIPAL):
@@ -21,76 +19,48 @@ if os.path.exists(ARCHIVO_PRINCIPAL):
                 data = json.loads(line)
                 libros[data["codigo"]] = LibroUsuario(**data)
 
-print("✅ Gestor de Almacenamiento iniciado (GA-Primario)")
+print("✅ Gestor de Almacenamiento (GA) operativo.")
 
-# ===============================
-# Guardado directo
-# ===============================
 def guardar_datos():
-    """Guarda los libros en el archivo principal."""
+    """Guarda los cambios en el archivo principal."""
     with LOCK:
         with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
             for l in libros.values():
                 f.write(json.dumps(l.to_dict()) + "\n")
-            f.flush()
-    print("💾 Cambios guardados correctamente en la base principal.")
+    print("💾 Datos actualizados correctamente en libros.txt")
 
-# ===============================
-# Bucle principal de servicio GA
-# ===============================
 while True:
     try:
-        mensaje = socket.recv_json()
-        operacion = mensaje.get("operacion")
-        codigo = mensaje.get("codigo")
-        data = mensaje.get("data")
+        msg = socket.recv_json()
+        op = msg.get("operacion")
+        codigo = msg.get("codigo")
+        data = msg.get("data")
 
-        print(f"\n📨 Solicitud recibida: {operacion} (Código: {codigo})")
-
-        # ---- LECTURA ----
-        if operacion == "leer":
+        if op == "leer":
             libro = libros.get(codigo)
             if libro:
-                print(f"📘 Enviando datos de {codigo} al solicitante.")
                 socket.send_json({"status": "ok", "libro": libro.to_dict()})
+                print(f"📖 Enviado libro {codigo}")
             else:
-                socket.send_json({"status": "error", "msg": "Libro no encontrado"})
+                socket.send_json({"status": "error", "msg": "No encontrado"})
+                print(f"❌ Libro {codigo} no encontrado")
 
-        # ---- ACTUALIZACIÓN ----
-        elif operacion == "actualizar":
+        elif op == "actualizar":
             if codigo in libros:
-                for clave, valor in data.items():
-                    setattr(libros[codigo], clave, valor)
+                for k, v in data.items():
+                    setattr(libros[codigo], k, v)
                 guardar_datos()
-                print(f"✅ Registro {codigo} actualizado y guardado en disco.")
-                socket.send_json({"status": "ok", "msg": "Registro actualizado"})
+                socket.send_json({"status": "ok", "msg": "Actualizado"})
+                print(f"✅ Libro {codigo} actualizado")
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
-
-        # ---- BACKUP ----
-        elif operacion == "backup":
-            socket.send_json({
-                "status": "ok",
-                "backup": [libro.to_dict() for libro in libros.values()]
-            })
-
-        # ---- SINCRONIZAR ----
-        elif operacion == "sincronizar":
-            nuevos_datos = mensaje.get("backup", [])
-            if nuevos_datos:
-                libros.clear()
-                for d in nuevos_datos:
-                    libros[d["codigo"]] = LibroUsuario(**d)
-                guardar_datos()
-                socket.send_json({"status": "ok", "msg": "Sincronización completa"})
-            else:
-                socket.send_json({"status": "error", "msg": "Sin datos para sincronizar"})
+                print(f"⚠️ Código {codigo} inexistente")
 
         else:
-            socket.send_json({"status": "error", "msg": f"Operación '{operacion}' no reconocida"})
+            socket.send_json({"status": "error", "msg": f"Operación '{op}' no válida"})
 
     except Exception as e:
-        print(f"❌ Error en GA: {e}")
+        print(f"❌ Error GA: {e}")
         try:
             socket.send_json({"status": "error", "msg": str(e)})
         except:
