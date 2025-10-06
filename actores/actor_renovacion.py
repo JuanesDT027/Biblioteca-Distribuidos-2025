@@ -1,7 +1,7 @@
 import zmq
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from common.LibroUsuario import LibroUsuario
 
 # Crear contexto de ZMQ
@@ -26,6 +26,7 @@ while True:
     data = json.loads(contenido)
 
     libro_data = data.get("libro")
+    fecha_nueva = data.get("fecha_nueva")
 
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
@@ -45,26 +46,30 @@ while True:
         if respuesta["status"] == "ok":
             libro = LibroUsuario(**respuesta["libro"])
 
-            # Calcular la nueva fecha de entrega (+7 días desde hoy)
-            fecha_actual = datetime.now()
-            nueva_fecha = fecha_actual + timedelta(days=7)
-            fecha_nueva_str = nueva_fecha.strftime("%d/%m/%Y")
+            # 2️⃣ Convertir la fecha a formato estándar YYYY-MM-DD
+            try:
+                # Si la fecha tiene hora, tomar solo la parte de la fecha
+                fecha_dt = datetime.strptime(fecha_nueva.split(" ")[0], "%Y-%m-%d")
+                fecha_nueva_fmt = fecha_dt.strftime("%Y-%m-%d")
+            except Exception:
+                # En caso de error, usar la fecha actual como respaldo
+                fecha_nueva_fmt = datetime.now().strftime("%Y-%m-%d")
 
-            # Breve pausa antes del segundo envío
+            # Breve pausa antes del segundo envío para evitar colisiones de socket
             time.sleep(0.3)
 
-            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva_str} en el GA...")
+            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva_fmt} en el GA...")
             ga_socket.send_json({
                 "operacion": "actualizar",
                 "codigo": codigo,
-                "data": {"fecha_entrega": fecha_nueva_str}
+                "data": {"fecha_entrega": fecha_nueva_fmt}
             })
 
             try:
                 resp_actualizar = ga_socket.recv_json()
                 print("📤 Respuesta del GA (actualizar):", resp_actualizar)
                 if resp_actualizar["status"] == "ok":
-                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva_str}.")
+                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva_fmt}.")
                 else:
                     print(f"⚠️ Error al actualizar: {resp_actualizar['msg']}")
             except zmq.Again:
