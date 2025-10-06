@@ -5,7 +5,6 @@ import os
 from common.LibroUsuario import LibroUsuario
 
 ARCHIVO_PRINCIPAL = "data/libros.txt"
-ARCHIVO_REPLICA = "data/libros_replica.txt"
 LOCK = threading.Lock()
 
 # Crear contexto y socket REP
@@ -13,7 +12,7 @@ context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5560")  # Puerto exclusivo para GA
 
-# Cargar BD simulada desde archivo
+
 libros = {}
 if os.path.exists(ARCHIVO_PRINCIPAL):
     with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
@@ -25,26 +24,20 @@ if os.path.exists(ARCHIVO_PRINCIPAL):
 print("✅ Gestor de Almacenamiento iniciado (GA-Primario)")
 
 # ===============================
-# Guardado directo (principal + réplica)
+# Guardado directo
 # ===============================
 def guardar_datos():
-    """Guarda los libros en el archivo principal y en la réplica."""
+    """Guarda los libros en el archivo principal."""
     with LOCK:
-        # Guardar base principal
         with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
             for l in libros.values():
                 f.write(json.dumps(l.to_dict()) + "\n")
             f.flush()
+    print("💾 Cambios guardados correctamente en la base principal.")
 
-        # Guardar copia de seguridad
-        with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f2:
-            for l in libros.values():
-                f2.write(json.dumps(l.to_dict()) + "\n")
-            f2.flush()
-
-    print("💾 Cambios guardados en la base principal y réplica.")
-
-
+# ===============================
+# Bucle principal de servicio GA
+# ===============================
 while True:
     try:
         mensaje = socket.recv_json()
@@ -68,8 +61,8 @@ while True:
             if codigo in libros:
                 for clave, valor in data.items():
                     setattr(libros[codigo], clave, valor)
-                guardar_datos()  # Guardar directamente
-                print(f"✅ Registro {codigo} actualizado y persistido.")
+                guardar_datos()
+                print(f"✅ Registro {codigo} actualizado y guardado en disco.")
                 socket.send_json({"status": "ok", "msg": "Registro actualizado"})
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
