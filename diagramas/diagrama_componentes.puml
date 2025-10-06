@@ -1,6 +1,7 @@
 @startuml
-title III-B3. Diagrama de Componentes - Sistema de Biblioteca Distribuido (con garritas UML)
+title III-B3. Diagrama de Componentes - Sistema de Biblioteca Distribuido
 skinparam backgroundColor white
+
 skinparam component {
   BackgroundColor #009ee8
   BorderColor #006b9f
@@ -16,60 +17,60 @@ skinparam ArrowColor #006b9f
 
 left to right direction
 
-' === COMPONENTES PRINCIPALES ===
+' ==== Interfaces (declaradas primero) ====
+interface "I_Solicitud" as ISolicitud
+interface "I_Operacion" as IOperacion
+interface "I_Publicacion" as IPublicacion
+interface "I_Persistencia" as IPersistencia
+
+' ==== Componentes principales ====
 component "Proceso Solicitante\n(ps_solicitantes.py)" as PS
 component "Gestor de Carga\n(gestor_carga.py)" as GC
 component "Gestor de Almacenamiento\n(gestor_almacenamiento.py)" as GA
 database "Archivo libros.txt\n(data/libros.txt)" as BD
 
-package "Actores Distribuidos" #white {
+' ==== Actores agrupados ====
+package "Actores Distribuidos" {
   component "Actor de Préstamo\n(actor_prestamo.py)" as AP
   component "Actor de Renovación\n(actor_renovacion.py)" as AR
   component "Actor de Devolución\n(actor_devolucion.py)" as AD
 }
 
-' === INTERFACES ===
-() "I_Solicitud" as ISolicitud
-() "I_Operacion" as IOperacion
-() "I_Publicacion" as IPublicacion
-() "I_Persistencia" as IPersistencia
+' ==== Relaciones (sintaxis compatible y estable) ====
+' Cliente -> interfaz de solicitud -> Gestor (GC provee I_Solicitud)
+PS --> ISolicitud
+GC ..|> ISolicitud
 
-' === CONEXIONES USANDO GARRITAS (required interfaces) ===
+' Gestor -> I_Operacion -> Actor de Préstamo
+GC ..|> IOperacion
+AP --> IOperacion
 
-' Cliente requiere I_Solicitud -> GC provee I_Solicitud
-PS }-- ISolicitud
-ISolicitud --{ GC
+' Gestor -> I_Publicacion -> Actores de Renovación y Devolución
+GC ..|> IPublicacion
+AR --> IPublicacion
+AD --> IPublicacion
 
-' Gestor provee I_Operacion -> AP la requiere
-GC }-- IOperacion
-IOperacion --{ AP
+' Gestor de Almacenamiento -> I_Persistencia -> consumido por GC y Actores
+GA ..|> IPersistencia
+GC --> IPersistencia
+AP --> IPersistencia
+AR --> IPersistencia
+AD --> IPersistencia
 
-' Gestor provee I_Publicacion -> AR y AD la requieren
-GC }-- IPublicacion
-IPublicacion --{ AR
-IPublicacion --{ AD
-
-' Gestor de almacenamiento provee I_Persistencia -> la requieren GC y actores
-GA }-- IPersistencia
-IPersistencia --{ GC
-IPersistencia --{ AP
-IPersistencia --{ AR
-IPersistencia --{ AD
-
-' Conexión hacia el archivo
+' Persistencia física
 GA --> BD : lectura / escritura
 
-' === NOTAS ===
+' ==== Notas explicativas ====
 note top of GC
-Gestor de Carga: coordina solicitudes y publica eventos\npara los actores distribuidos.
+Gestor de Carga: valida, orquesta y publica eventos\n(REQ/REP para préstamos, PUB/SUB para eventos).
 end note
 
-note top of PS
-Proceso Solicitante: cliente externo que\ninicia operaciones (préstamo, devolución, renovación).
+note left of PS
+Proceso Solicitante: cliente que envía solicitudes\nvia REQ/REP a GC.
 end note
 
 note right of GA
-Gestor de Almacenamiento: provee persistencia hacia\n'data/libros.txt'.
+Gestor de Almacenamiento: abstracción del acceso\na data/libros.txt.
 end note
 
 @enduml
