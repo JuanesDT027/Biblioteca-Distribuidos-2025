@@ -1,75 +1,80 @@
 # actores/actor_prestamo.py
 import zmq
 import json
+import time
+from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
-from threading import Lock
 
-# Lock para evitar escritura concurrente en libros.txt
-archivo_lock = Lock()
-
-# Contexto ZMQ
+# Crear contexto de ZMQ
 context = zmq.Context()
 
-# Socket REP para atender solicitudes de préstamo del Gestor de Carga
+# Socket REP (recibe solicitudes del Gestor de Carga - GC)
 rep_socket = context.socket(zmq.REP)
 rep_socket.bind("tcp://*:5557")  # Puerto exclusivo para préstamos
 
-# Cargar BD simulada desde archivo
-libros = {}
-with open("data/libros.txt", "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-            libros[data["codigo"]] = LibroUsuario(**data)
-        except json.JSONDecodeError as e:
-            print(f"⚠️ Error leyendo línea: {line}")
-            print(e)
+# Socket REQ (comunica con el Gestor de Almacenamiento - GA)
+ga_socket = context.socket(zmq.REQ)
+ga_socket.connect("tcp://localhost:5560")  # Puerto del GA
+ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
 
-print("✅ Actor Préstamo iniciado y escuchando solicitudes...")
-
-def guardar_libros():
-    """Guarda la BD de libros en data/libros.txt de forma segura"""
-    with archivo_lock:
-        with open("data/libros.txt", "w", encoding="utf-8") as f:
-            for l in libros.values():
-                f.write(json.dumps(l.to_dict()) + "\n")
+print("✅ Actor Préstamo iniciado y conectado al Gestor de Almacenamiento (GA)...")
 
 while True:
     try:
-        # Recibir solicitud de préstamo del GC
+        # 1️⃣ Recibir solicitud de préstamo del Gestor de Carga
         mensaje = rep_socket.recv_json()
         codigo = mensaje.get("codigo")
+        print(f"\n📥 Solicitud de préstamo recibida para libro {codigo}")
 
-        libro = libros.get(codigo)
-        if libro:
+        # 2️⃣ Leer datos del libro desde el GA
+        ga_socket.send_json({"operacion": "leer", "codigo": codigo})
+        try:
+            respuesta = ga_socket.recv_json()
+            print("📘 Respuesta del GA (leer):", respuesta)
+        except zmq.Again:
+            rep_socket.send_json({"status": "error", "msg": "Tiempo de espera al consultar GA"})
+            continue
+
+        if respuesta["status"] == "ok":
+            libro = LibroUsuario(**respuesta["libro"])
+
+            # 3️⃣ Validar disponibilidad
             if libro.ejemplares_disponibles > 0:
-                # Autorizar préstamo
                 libro.ejemplares_disponibles -= 1
                 libro.prestado = True
-                rep_socket.send_json({
-                    "status": "ok",
-                    "msg": f"Préstamo autorizado para {libro.titulo} por 2 semanas"
-                })
-                print(f"✅ Préstamo autorizado: {libro.titulo}")
-                guardar_libros()
-            else:
-                # No hay ejemplares disponibles
-                rep_socket.send_json({
-                    "status": "error",
-                    "msg": f"Préstamo DENEGADO: no hay ejemplares disponibles de {libro.titulo}"
-                })
-                print(f"❌ Préstamo DENEGADO: {libro.titulo}")
-        else:
-            # Libro no existe
-            rep_socket.send_json({
-                "status": "error",
-                "msg": f"Préstamo DENEGADO: libro con código {codigo} no existe"
-            })
-            print(f"❌ Préstamo DENEGADO: código {codigo} no existe")
+                fecha_entrega = (datetime.now() + timedelta(weeks=2)).strftime("%Y-%m-%d")
 
-    except json.JSONDecodeError as e:
-        print("⚠️ Error al decodificar JSON de solicitud:", e)
-        rep_socket.send_json({"status": "error", "msg": "Solicitud inválida"})
+                print(f"✏️ Actualizando préstamo de '{libro.titulo}' en GA (entrega {fecha_entrega})...")
+                ga_socket.send_json({
+                    "operacion": "actualizar",
+                    "codigo": codigo,
+                    "data": {
+                        "ejemplares_disponibles": libro.ejemplares_disponibles,
+                        "prestado": True,
+                        "fecha_entrega": fecha_entrega
+                    }
+                })
+
+                try:
+                    resp_actualizar = ga_socket.recv_json()
+                    print("📤 Respuesta del GA (actualizar):", resp_actualizar)
+                    if resp_actualizar["status"] == "ok":
+                        msg = f"✅ Préstamo autorizado para '{libro.titulo}' hasta {fecha_entrega}"
+                        print(msg)
+                        rep_socket.send_json({"status": "ok", "msg": msg})
+                    else:
+                        rep_socket.send_json({"status": "error", "msg": resp_actualizar["msg"]})
+                except zmq.Again:
+                    rep_socket.send_json({"status": "error", "msg": "Tiempo de espera al actualizar GA"})
+            else:
+                msg = f"❌ Préstamo DENEGADO: sin ejemplares disponibles de '{libro.titulo}'"
+                print(msg)
+                rep_socket.send_json({"status": "error", "msg": msg})
+        else:
+            msg = f"❌ Libro con código {codigo} no encontrado en GA"
+            print(msg)
+            rep_socket.send_json({"status": "error", "msg": msg})
+
+    except Exception as e:
+        print(f"⚠️ Error en actor préstamo: {e}")
+        rep_socket.send_json({"status": "error", "msg": str(e)})
