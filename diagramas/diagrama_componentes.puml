@@ -1,0 +1,75 @@
+@startuml
+title III-B3. Diagrama de Componentes - Sistema de Biblioteca Distribuido (con garritas UML)
+skinparam backgroundColor white
+skinparam component {
+  BackgroundColor #009ee8
+  BorderColor #006b9f
+  FontColor black
+  RoundCorner 10
+}
+skinparam interface {
+  BackgroundColor white
+  BorderColor #006b9f
+  FontColor black
+}
+skinparam ArrowColor #006b9f
+
+left to right direction
+
+' === COMPONENTES PRINCIPALES ===
+component "Proceso Solicitante\n(ps_solicitantes.py)" as PS
+component "Gestor de Carga\n(gestor_carga.py)" as GC
+component "Gestor de Almacenamiento\n(gestor_almacenamiento.py)" as GA
+database "Archivo libros.txt\n(data/libros.txt)" as BD
+
+package "Actores Distribuidos" #white {
+  component "Actor de Préstamo\n(actor_prestamo.py)" as AP
+  component "Actor de Renovación\n(actor_renovacion.py)" as AR
+  component "Actor de Devolución\n(actor_devolucion.py)" as AD
+}
+
+' === INTERFACES ===
+() "I_Solicitud" as ISolicitud
+() "I_Operacion" as IOperacion
+() "I_Publicacion" as IPublicacion
+() "I_Persistencia" as IPersistencia
+
+' === CONEXIONES USANDO GARRITAS (required interfaces) ===
+
+' Cliente requiere I_Solicitud -> GC provee I_Solicitud
+PS }-- ISolicitud
+ISolicitud --{ GC
+
+' Gestor provee I_Operacion -> AP la requiere
+GC }-- IOperacion
+IOperacion --{ AP
+
+' Gestor provee I_Publicacion -> AR y AD la requieren
+GC }-- IPublicacion
+IPublicacion --{ AR
+IPublicacion --{ AD
+
+' Gestor de almacenamiento provee I_Persistencia -> la requieren GC y actores
+GA }-- IPersistencia
+IPersistencia --{ GC
+IPersistencia --{ AP
+IPersistencia --{ AR
+IPersistencia --{ AD
+
+' Conexión hacia el archivo
+GA --> BD : lectura / escritura
+
+' === NOTAS ===
+note top of GC
+Gestor de Carga: coordina solicitudes y publica eventos\npara los actores distribuidos.
+end note
+
+note top of PS
+Proceso Solicitante: cliente externo que\ninicia operaciones (préstamo, devolución, renovación).
+end note
+
+note right of GA
+Gestor de Almacenamiento: provee persistencia hacia\n'data/libros.txt'.
+end note
+
+@enduml

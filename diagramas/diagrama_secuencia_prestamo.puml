@@ -1,0 +1,48 @@
+@startuml
+title III-D3. Secuencia de operación de préstamo (síncrona)
+skinparam backgroundColor white
+skinparam sequence {
+    LifeLineBorderColor #009ee8
+    LifeLineBackgroundColor #009ee8
+    ActorBorderColor #009ee8
+    ActorBackgroundColor #009ee8
+    ParticipantBorderColor #009ee8
+    ParticipantBackgroundColor #009ee8
+    ArrowColor #009ee8
+    BoxBorderColor #009ee8
+    BoxBackgroundColor white
+}
+
+actor "Proceso Solicitante\n(PS)" as PS
+participant "Gestor de Carga\n(GC)" as GC
+participant "Actor de Préstamo\n(Act_Prestamo)" as AP
+database "Archivo libros.txt\n(BD simulada)" as BD
+
+== Inicio de solicitud ==
+PS -> GC : Enviar solicitud JSON\n{operacion:"prestamo", codigo:"L0003"}
+activate GC
+
+GC -> GC : Buscar libro en memoria\n(libros[codigo])
+alt Libro encontrado
+    GC -> AP : REQ ZeroMQ\nEnviar solicitud de préstamo
+    activate AP
+    AP -> BD : Leer libro del archivo
+    AP -> AP : Verificar disponibilidad\n(ejemplares_disponibles > 0)
+    alt Disponible
+        AP -> BD : Actualizar estado\nprestado=True\nejemplares_disponibles -= 1
+        AP --> GC : RESP JSON\n{"status":"ok","msg":"Préstamo autorizado"}
+    else No disponible
+        AP --> GC : RESP JSON\n{"status":"error","msg":"Sin ejemplares"}
+    end
+    deactivate AP
+    GC --> PS : RESP JSON\nCon resultado del préstamo
+else Libro no encontrado
+    GC --> PS : RESP JSON\n{"status":"error","msg":"Libro no existe"}
+end
+deactivate GC
+
+== Fin de operación ==
+note over PS, GC
+Operación completada de forma síncrona.\nEl PS espera la respuesta del GC.
+end note
+@enduml

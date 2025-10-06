@@ -1,0 +1,40 @@
+@startuml
+title III-A3. Diagrama de despliegue general
+skinparam backgroundColor white
+skinparam node {
+    BackgroundColor #009ee8
+    BorderColor #006b9f
+    FontColor black
+}
+skinparam artifact {
+    BackgroundColor white
+    BorderColor #009ee8
+}
+
+' --- NODOS PRINCIPALES ---
+node "Cliente / Operador Central\n(PC principal)" as CLIENTE {
+    artifact "gestor_carga.py\n(PUB/SUB + REQ/REP)" as GC
+    artifact "ps_solicitantes.py\n(Proceso solicitante)" as PS
+}
+
+node "Sede 1\n(Nodo de Renovación y Devolución)" as SEDE1 {
+    artifact "actor_devolucion.py" as AD
+    artifact "actor_renovacion.py" as AR
+}
+
+node "Sede 2\n(Nodo de Préstamos y Almacenamiento)" as SEDE2 {
+    artifact "actor_prestamo.py" as AP
+    artifact "gestor_almacenamiento/\ngenerar_datos.py" as GA
+    artifact "data/libros.txt\n(Base de datos simulada)" as BD
+}
+
+' --- CONEXIONES DE RED ---
+CLIENTE -[#009ee8]-> SEDE1 : Canal PUB/SUB (tcp://*:5556)\nEventos de devolución/renovación
+CLIENTE -[#009ee8]-> SEDE2 : Canal REQ/REP (tcp://*:5557)\nSolicitudes de préstamo
+PS -[#009ee8]-> GC : Canal REQ/REP (tcp://*:5555)\nSolicitud principal
+
+' --- FALLBACK Y MONITOREO ---
+GC -[#blue,dashed]-> BD : Lectura y actualización de libros
+AP -[#blue,dashed]-> BD : Actualiza estado de préstamo
+
+@enduml
