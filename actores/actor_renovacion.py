@@ -1,9 +1,7 @@
-# ======================================
-# actores/actor_renovacion.py
-# ======================================
 import zmq
 import json
 import time
+from datetime import datetime
 from common.LibroUsuario import LibroUsuario
 
 # Crear contexto de ZMQ
@@ -48,21 +46,28 @@ while True:
         if respuesta["status"] == "ok":
             libro = LibroUsuario(**respuesta["libro"])
 
+            # Convertir fecha nueva a formato solo día/mes/año
+            try:
+                fecha_dt = datetime.strptime(fecha_nueva.split(" ")[0], "%Y-%m-%d")
+                fecha_nueva_fmt = fecha_dt.strftime("%Y-%m-%d")
+            except Exception:
+                fecha_nueva_fmt = datetime.now().strftime("%Y-%m-%d")
+
             # Breve pausa antes del segundo envío
             time.sleep(0.3)
 
-            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva} en el GA...")
+            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva_fmt} en el GA...")
             ga_socket.send_json({
                 "operacion": "actualizar",
                 "codigo": codigo,
-                "data": {"fecha_entrega": fecha_nueva}
+                "data": {"fecha_entrega": fecha_nueva_fmt}
             })
 
             try:
                 resp_actualizar = ga_socket.recv_json()
                 print("📤 Respuesta del GA (actualizar):", resp_actualizar)
                 if resp_actualizar["status"] == "ok":
-                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva}.")
+                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva_fmt}.")
                 else:
                     print(f"⚠️ Error al actualizar: {resp_actualizar['msg']}")
             except zmq.Again:

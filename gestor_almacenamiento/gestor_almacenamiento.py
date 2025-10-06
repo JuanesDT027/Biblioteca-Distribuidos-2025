@@ -1,6 +1,3 @@
-# ===============================================
-# gestor_almacenamiento/gestor_almacenamiento.py
-# ===============================================
 import zmq
 import json
 import threading
@@ -16,9 +13,7 @@ context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5560")  # Puerto exclusivo para GA
 
-# ===============================
-# Cargar datos en memoria
-# ===============================
+# Cargar BD simulada desde archivo
 libros = {}
 if os.path.exists(ARCHIVO_PRINCIPAL):
     with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
@@ -30,26 +25,26 @@ if os.path.exists(ARCHIVO_PRINCIPAL):
 print("✅ Gestor de Almacenamiento iniciado (GA-Primario)")
 
 # ===============================
-# Función de guardado no bloqueante
+# Guardado directo (principal + réplica)
 # ===============================
-def guardar_datos_async():
-    """Guarda los libros sin bloquear el socket principal."""
-    def _guardar():
-        with LOCK:
-            with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
-                for l in libros.values():
-                    f.write(json.dumps(l.to_dict()) + "\n")
-                f.flush()
-            with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f2:
-                for l in libros.values():
-                    f2.write(json.dumps(l.to_dict()) + "\n")
-                f2.flush()
-        print("💾 Cambios guardados y replicados correctamente.")
-    threading.Thread(target=_guardar, daemon=True).start()
+def guardar_datos():
+    """Guarda los libros en el archivo principal y en la réplica."""
+    with LOCK:
+        # Guardar base principal
+        with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
+            for l in libros.values():
+                f.write(json.dumps(l.to_dict()) + "\n")
+            f.flush()
 
-# ===============================
-# Bucle principal de servicio GA
-# ===============================
+        # Guardar copia de seguridad
+        with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f2:
+            for l in libros.values():
+                f2.write(json.dumps(l.to_dict()) + "\n")
+            f2.flush()
+
+    print("💾 Cambios guardados en la base principal y réplica.")
+
+
 while True:
     try:
         mensaje = socket.recv_json()
@@ -73,8 +68,8 @@ while True:
             if codigo in libros:
                 for clave, valor in data.items():
                     setattr(libros[codigo], clave, valor)
-                guardar_datos_async()  # Guardado en hilo aparte
-                print(f"✅ Registro {codigo} actualizado (async).")
+                guardar_datos()  # Guardar directamente
+                print(f"✅ Registro {codigo} actualizado y persistido.")
                 socket.send_json({"status": "ok", "msg": "Registro actualizado"})
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
@@ -93,7 +88,7 @@ while True:
                 libros.clear()
                 for d in nuevos_datos:
                     libros[d["codigo"]] = LibroUsuario(**d)
-                guardar_datos_async()
+                guardar_datos()
                 socket.send_json({"status": "ok", "msg": "Sincronización completa"})
             else:
                 socket.send_json({"status": "error", "msg": "Sin datos para sincronizar"})
