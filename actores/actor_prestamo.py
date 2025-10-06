@@ -1,75 +1,69 @@
-# actores/actor_prestamo.py
 import zmq
 import json
+import time
+from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
-from threading import Lock
 
-# Lock para evitar escritura concurrente en libros.txt
-archivo_lock = Lock()
-
-# Contexto ZMQ
 context = zmq.Context()
 
-# Socket REP para atender solicitudes de préstamo del Gestor de Carga
 rep_socket = context.socket(zmq.REP)
 rep_socket.bind("tcp://*:5557")  # Puerto exclusivo para préstamos
 
-# Cargar BD simulada desde archivo
-libros = {}
-with open("data/libros.txt", "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-            libros[data["codigo"]] = LibroUsuario(**data)
-        except json.JSONDecodeError as e:
-            print(f"⚠️ Error leyendo línea: {line}")
-            print(e)
+ga_socket = context.socket(zmq.REQ)
+ga_socket.connect("tcp://localhost:5560")  # GA
+ga_socket.RCVTIMEO = 5000  # Timeout
 
-print("✅ Actor Préstamo iniciado y escuchando solicitudes...")
-
-def guardar_libros():
-    """Guarda la BD de libros en data/libros.txt de forma segura"""
-    with archivo_lock:
-        with open("data/libros.txt", "w", encoding="utf-8") as f:
-            for l in libros.values():
-                f.write(json.dumps(l.to_dict()) + "\n")
+print("✅ Actor Préstamo conectado al Gestor de Almacenamiento (GA)...")
 
 while True:
     try:
-        # Recibir solicitud de préstamo del GC
         mensaje = rep_socket.recv_json()
         codigo = mensaje.get("codigo")
+        print(f"\n📘 Solicitud de préstamo recibida para: {codigo}")
 
-        libro = libros.get(codigo)
-        if libro:
+        # Leer libro en GA
+        ga_socket.send_json({"operacion": "leer", "codigo": codigo})
+        try:
+            respuesta = ga_socket.recv_json()
+        except zmq.Again:
+            rep_socket.send_json({"status": "error", "msg": "Sin respuesta del GA"})
+            continue
+
+        if respuesta["status"] == "ok":
+            libro = LibroUsuario(**respuesta["libro"])
+
             if libro.ejemplares_disponibles > 0:
-                # Autorizar préstamo
                 libro.ejemplares_disponibles -= 1
                 libro.prestado = True
-                rep_socket.send_json({
-                    "status": "ok",
-                    "msg": f"Préstamo autorizado para {libro.titulo} por 2 semanas"
-                })
-                print(f"✅ Préstamo autorizado: {libro.titulo}")
-                guardar_libros()
-            else:
-                # No hay ejemplares disponibles
-                rep_socket.send_json({
-                    "status": "error",
-                    "msg": f"Préstamo DENEGADO: no hay ejemplares disponibles de {libro.titulo}"
-                })
-                print(f"❌ Préstamo DENEGADO: {libro.titulo}")
-        else:
-            # Libro no existe
-            rep_socket.send_json({
-                "status": "error",
-                "msg": f"Préstamo DENEGADO: libro con código {codigo} no existe"
-            })
-            print(f"❌ Préstamo DENEGADO: código {codigo} no existe")
+                fecha_entrega = (datetime.now() + timedelta(weeks=2)).strftime("%Y-%m-%d")
 
-    except json.JSONDecodeError as e:
-        print("⚠️ Error al decodificar JSON de solicitud:", e)
-        rep_socket.send_json({"status": "error", "msg": "Solicitud inválida"})
+                # Actualizar GA
+                ga_socket.send_json({
+                    "operacion": "actualizar",
+                    "codigo": codigo,
+                    "data": {
+                        "ejemplares_disponibles": libro.ejemplares_disponibles,
+                        "prestado": True,
+                        "fecha_entrega": fecha_entrega
+                    }
+                })
+
+                try:
+                    resp_actualizar = ga_socket.recv_json()
+                    if resp_actualizar["status"] == "ok":
+                        msg = f"Préstamo OK: '{libro.titulo}' hasta {fecha_entrega}"
+                        print(f"✅ {msg}")
+                        rep_socket.send_json({"status": "ok", "msg": msg})
+                    else:
+                        rep_socket.send_json(resp_actualizar)
+                except zmq.Again:
+                    rep_socket.send_json({"status": "error", "msg": "GA sin respuesta"})
+            else:
+                msg = f"❌ Sin ejemplares de '{libro.titulo}'"
+                print(msg)
+                rep_socket.send_json({"status": "error", "msg": msg})
+        else:
+            rep_socket.send_json(respuesta)
+
+    except Exception as e:
+        rep_socket.send_json({"status": "error", "msg": str(e)})
