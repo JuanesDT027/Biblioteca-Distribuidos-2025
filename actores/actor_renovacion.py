@@ -1,40 +1,86 @@
+# ======================================
+# actores/actor_renovacion.py
+# ======================================
 import zmq
 import json
+import time
+from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
 
-# Configurar contexto y socket SUB
+# Crear contexto ZMQ
 context = zmq.Context()
+
+# Socket SUB: recibe publicaciones del Gestor de Carga (GC)
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://localhost:5556")  # mismo puerto que PUB del GC
+sub_socket.connect("tcp://localhost:5556")  # Puerto del GC (PUB)
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Renovacion")
 
-# Cargar BD simulada desde archivo
-libros = {}
-with open("data/libros.txt", "r") as f:
-    for line in f:
-        data = json.loads(line)
-        libros[data["codigo"]] = LibroUsuario(**data)
+# Socket REQ: comunica con el Gestor de Almacenamiento (GA)
+ga_socket = context.socket(zmq.REQ)
+ga_socket.connect("tcp://localhost:5560")  # Puerto del GA
+ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
 
-print("✅ Actor Renovación iniciado y escuchando...")
+print("✅ Actor Renovación conectado al Gestor de Almacenamiento (GA)...")
+
+# Estructura para llevar el conteo de renovaciones
+contador_renovaciones = {}
 
 while True:
-    # Recibir mensaje como string y separar tópico del contenido
     mensaje_raw = sub_socket.recv_string()
     topico, contenido = mensaje_raw.split(" ", 1)
-
-    # Parsear el JSON del contenido
     data = json.loads(contenido)
     libro_data = data.get("libro")
-    fecha_nueva = data.get("fecha_nueva")
 
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
-        libro = libros.get(codigo)
-        if libro:
-            libro.fecha_entrega = fecha_nueva
-            print(f"Libro {libro.titulo} renovado hasta {fecha_nueva}.")
+        print(f"\n📙 Solicitud de renovación recibida → {codigo}")
 
-            # Guardar cambios en archivo
-            with open("data/libros.txt", "w", encoding="utf-8") as f:
-                for l in libros.values():
-                    f.write(json.dumps(l.to_dict()) + "\n")
+        # 1️⃣ Leer datos del libro desde GA
+        ga_socket.send_json({"operacion": "leer", "codigo": codigo})
+        try:
+            respuesta = ga_socket.recv_json()
+        except zmq.Again:
+            print("⚠️ GA no respondió (lectura).")
+            continue
+
+        if respuesta["status"] != "ok":
+            print(f"❌ Libro {codigo} no encontrado en GA.")
+            continue
+
+        libro = LibroUsuario(**respuesta["libro"])
+
+        # Obtener la fecha actual de entrega
+        try:
+            fecha_actual = datetime.strptime(libro.fecha_entrega, "%Y-%m-%d") if libro.fecha_entrega else datetime.now()
+        except Exception:
+            fecha_actual = datetime.now()
+
+        # Calcular cantidad de renovaciones previas
+        renovaciones_previas = contador_renovaciones.get(codigo, 0)
+
+        if renovaciones_previas >= 2:
+            print(f"⛔ Renovación rechazada: '{libro.titulo}' ya fue renovado 2 veces.")
+            continue
+
+        # Calcular nueva fecha (+7 días)
+        nueva_fecha = fecha_actual + timedelta(days=7)
+        nueva_fecha_fmt = nueva_fecha.strftime("%Y-%m-%d")
+
+        # Actualizar en GA
+        print(f"✏️ Actualizando fecha_entrega → {nueva_fecha_fmt} en GA...")
+        ga_socket.send_json({
+            "operacion": "actualizar",
+            "codigo": codigo,
+            "data": {"fecha_entrega": nueva_fecha_fmt}
+        })
+
+        try:
+            resp = ga_socket.recv_json()
+            if resp["status"] == "ok":
+                contador_renovaciones[codigo] = renovaciones_previas + 1
+                print(f"✅ '{libro.titulo}' renovado hasta {nueva_fecha_fmt} "
+                      f"(renovaciones: {contador_renovaciones[codigo]}/2).")
+            else:
+                print(f"⚠️ Error al actualizar: {resp['msg']}")
+        except zmq.Again:
+            print("⚠️ GA no respondió (actualización).")
