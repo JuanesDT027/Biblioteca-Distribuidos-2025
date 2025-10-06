@@ -1,7 +1,7 @@
 import zmq
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
 
 # Crear contexto de ZMQ
@@ -26,7 +26,6 @@ while True:
     data = json.loads(contenido)
 
     libro_data = data.get("libro")
-    fecha_nueva = data.get("fecha_nueva")
 
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
@@ -46,28 +45,25 @@ while True:
         if respuesta["status"] == "ok":
             libro = LibroUsuario(**respuesta["libro"])
 
-            # Convertir fecha nueva a formato solo día/mes/año
-            try:
-                fecha_dt = datetime.strptime(fecha_nueva.split(" ")[0], "%Y-%m-%d")
-                fecha_nueva_fmt = fecha_dt.strftime("%Y-%m-%d")
-            except Exception:
-                fecha_nueva_fmt = datetime.now().strftime("%Y-%m-%d")
+            # Calcular la nueva fecha de entrega (+7 días desde hoy)
+            nueva_fecha = datetime.now() + timedelta(days=7)
+            fecha_nueva_str = nueva_fecha.strftime("%d/%m/%Y")
 
             # Breve pausa antes del segundo envío
             time.sleep(0.3)
 
-            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva_fmt} en el GA...")
+            print(f"✏️ Actualizando fecha_entrega a {fecha_nueva_str} en el GA...")
             ga_socket.send_json({
                 "operacion": "actualizar",
                 "codigo": codigo,
-                "data": {"fecha_entrega": fecha_nueva_fmt}
+                "data": {"fecha_entrega": fecha_nueva_str}
             })
 
             try:
                 resp_actualizar = ga_socket.recv_json()
                 print("📤 Respuesta del GA (actualizar):", resp_actualizar)
                 if resp_actualizar["status"] == "ok":
-                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva_fmt}.")
+                    print(f"✅ Libro '{libro.titulo}' renovado correctamente hasta {fecha_nueva_str}.")
                 else:
                     print(f"⚠️ Error al actualizar: {resp_actualizar['msg']}")
             except zmq.Again:
