@@ -1,0 +1,64 @@
+@startuml
+title III-D4. Secuencia de fallo y recuperación (Failover GC/BD)
+skinparam backgroundColor white
+skinparam sequence {
+    LifeLineBorderColor #009ee8
+    LifeLineBackgroundColor #009ee8
+    ActorBorderColor #009ee8
+    ActorBackgroundColor #009ee8
+    ParticipantBorderColor #009ee8
+    ParticipantBackgroundColor #009ee8
+    ArrowColor #009ee8
+    BoxBorderColor #009ee8
+    BoxBackgroundColor white
+}
+
+actor "Proceso Solicitante\n(PS)" as PS
+participant "Gestor de Carga\n(GC - Principal)" as GC
+participant "Gestor de Carga\n(Secundario / Backup)" as GC2
+participant "Actor de Préstamo\n(Act_Prestamo)" as AP
+database "Archivo libros.txt\n(BD simulada)" as BD
+
+== Inicio de operación ==
+PS -> GC : Enviar solicitud JSON\n{operacion:"prestamo", codigo:"L0010"}
+activate GC
+GC -> BD : Leer datos del libro
+alt BD disponible
+    GC -> AP : REQ ZeroMQ\nSolicitar préstamo
+    activate AP
+    AP -> BD : Actualizar estado del libro
+    AP --> GC : RESP JSON\n{"status":"ok","msg":"Préstamo autorizado"}
+    deactivate AP
+    GC --> PS : RESP JSON\n{"status":"ok"}
+else BD no responde
+    GC -> GC : Registrar error de acceso a BD
+    GC --> PS : RESP JSON\n{"status":"error","msg":"Fallo al acceder a BD"}
+    deactivate GC
+end
+
+== Fallo del Gestor Principal ==
+PS -> GC : Nueva solicitud (timeout)
+note right of PS
+El proceso solicitante detecta que\nno hay respuesta del gestor principal.
+end note
+PS -> GC2 : Reenviar solicitud al Gestor Secundario
+activate GC2
+
+GC2 -> BD : Verificar disponibilidad
+alt BD recuperada
+    GC2 -> AP : REQ ZeroMQ\nReintentar préstamo
+    activate AP
+    AP -> BD : Actualizar libro correctamente
+    AP --> GC2 : RESP JSON\n{"status":"ok","msg":"Recuperado tras fallo"}
+    deactivate AP
+    GC2 --> PS : RESP JSON\n{"status":"ok","msg":"Operación completada por backup"}
+else BD sigue caída
+    GC2 --> PS : RESP JSON\n{"status":"error","msg":"Fallo persistente en BD"}
+end
+deactivate GC2
+
+== Recuperación ==
+note over GC2, BD
+El gestor secundario asume el control (failover)\ny sincroniza los cambios con la BD recuperada.
+end note
+@enduml

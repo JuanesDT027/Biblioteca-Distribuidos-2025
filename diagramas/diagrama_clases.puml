@@ -1,0 +1,93 @@
+@startuml
+title 📘 Diagrama de Clases - Biblioteca Distribuidos 2025
+
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #cccccc
+skinparam class {
+    BackgroundColor<<core>> #009ee8
+    BackgroundColor<<actor>> #009ee8
+    BackgroundColor<<gestor>> #009ee8
+    BackgroundColor<<proceso>> #009ee8
+    BackgroundColor<<almacen>> #009ee8
+    BorderColor white
+    FontColor white
+}
+skinparam package {
+    BackgroundColor transparent
+    BorderColor #cccccc
+}
+
+' ==== COMMON ====
+package "common" {
+    class LibroUsuario <<core>> {
+        - codigo : str
+        - titulo : str
+        - autor : str
+        - sede : str
+        - ejemplares_disponibles : int
+        - prestado : bool
+        - fecha_entrega : datetime
+        + to_dict() : dict
+    }
+}
+
+' ==== GESTOR DE CARGA ====
+package "gestor_carga" {
+    class GestorCarga <<gestor>> {
+        - libros : dict
+        + cargar_libros()
+        + procesarSolicitud()
+        + publicarActualizacion()
+    }
+}
+
+' ==== GESTOR DE ALMACENAMIENTO ====
+package "gestor_almacenamiento" {
+    class GenerarDatos <<almacen>> {
+        + generar_libros()
+        + guardar_en_txt()
+    }
+}
+
+' ==== ACTORES ====
+package "actores" {
+    class ActorDevolucion <<actor>> {
+        - libros : dict
+        + escucharDevolucion()
+        + actualizarLibro()
+    }
+
+    class ActorRenovacion <<actor>> {
+        - libros : dict
+        + escucharRenovacion()
+        + renovarLibro()
+    }
+
+    class ActorPrestamo <<actor>> {
+        - libros : dict
+        - archivo_lock : Lock
+        + escucharPrestamo()
+        + guardar_libros()
+    }
+}
+
+' ==== PROCESOS SOLICITANTES ====
+package "procesos_solicitantes" {
+    class ProcesoSolicitante <<proceso>> {
+        + enviarSolicitud()
+        + recibirRespuesta()
+    }
+}
+
+' ==== RELACIONES ====
+GestorCarga --> LibroUsuario : usa >
+ActorDevolucion --> LibroUsuario : modifica >
+ActorRenovacion --> LibroUsuario : actualiza >
+ActorPrestamo --> LibroUsuario : gestiona >
+ProcesoSolicitante --> GestorCarga : solicita >
+GestorCarga --> ActorPrestamo : coordina préstamo >
+GestorCarga --> ActorRenovacion : notifica >
+GestorCarga --> ActorDevolucion : notifica >
+GenerarDatos --> LibroUsuario : crea instancias >
+
+@enduml

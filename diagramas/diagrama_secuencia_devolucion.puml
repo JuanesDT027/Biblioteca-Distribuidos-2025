@@ -1,0 +1,55 @@
+@startuml
+title III-D1. Secuencia de operación de devolución (asíncrona)
+skinparam backgroundColor white
+skinparam sequence {
+    LifeLineBorderColor #009ee8
+    LifeLineBackgroundColor #009ee8
+    ActorBorderColor #009ee8
+    ActorBackgroundColor #009ee8
+    ParticipantBorderColor #009ee8
+    ParticipantBackgroundColor #009ee8
+    ArrowColor #009ee8
+    BoxBorderColor #009ee8
+    BoxBackgroundColor white
+}
+
+actor "Proceso Solicitante\n(PS)" as PS
+participant "Gestor de Carga\n(GC)" as GC
+participant "Canal PUB/SUB\n(ZeroMQ)" as PUB
+participant "Actor de Devolución\n(Act_Devolución)" as AD
+database "Archivo libros.txt\n(BD simulada)" as BD
+
+== Envío de solicitud ==
+PS -> GC : Enviar solicitud JSON\n{operacion:"devolucion", codigo:"L0001"}
+activate GC
+
+GC -> GC : Buscar libro en memoria\n(libros[codigo])
+alt Libro encontrado
+    GC -> PS : RESP JSON\n{"status":"ok","msg":"Devolución recibida"}
+    note right of PS
+    El PS recibe confirmación inmediata\nde que la operación fue aceptada.
+    end note
+
+    GC -> PUB : Publicar mensaje ZMQ\n"Devolucion {libro_json}"
+    deactivate GC
+
+    note over PUB, AD
+    Mensaje transmitido de forma asíncrona\n(No hay espera de respuesta).
+    end note
+
+    activate AD
+    AD -> AD : Recibir mensaje de devolución
+    AD -> BD : Leer libro y actualizar estado\nprestado=False\nejemplares_disponibles += 1
+    AD -> BD : Guardar cambios en "libros.txt"
+    AD --> AD : Mostrar mensaje en consola\n"Libro X actualizado como disponible"
+    deactivate AD
+
+else Libro no encontrado
+    GC --> PS : RESP JSON\n{"status":"error","msg":"Libro no existe"}
+end
+
+== Fin del flujo ==
+note over GC, AD
+Comunicación asíncrona.\nEl Gestor no espera respuesta\ndel Actor de Devolución.
+end note
+@enduml

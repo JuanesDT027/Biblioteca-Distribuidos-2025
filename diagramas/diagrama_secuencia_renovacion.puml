@@ -1,0 +1,56 @@
+@startuml
+title III-D2. Secuencia de operación de renovación (asíncrona)
+skinparam backgroundColor white
+skinparam sequence {
+    LifeLineBorderColor #009ee8
+    LifeLineBackgroundColor #009ee8
+    ActorBorderColor #009ee8
+    ActorBackgroundColor #009ee8
+    ParticipantBorderColor #009ee8
+    ParticipantBackgroundColor #009ee8
+    ArrowColor #009ee8
+    BoxBorderColor #009ee8
+    BoxBackgroundColor white
+}
+
+actor "Proceso Solicitante\n(PS)" as PS
+participant "Gestor de Carga\n(GC)" as GC
+participant "Canal PUB/SUB\n(ZeroMQ)" as PUB
+participant "Actor de Renovación\n(Act_Renovación)" as AR
+database "Archivo libros.txt\n(BD simulada)" as BD
+
+== Inicio de solicitud ==
+PS -> GC : Enviar solicitud JSON\n{operacion:"renovacion", codigo:"L0002"}
+activate GC
+
+GC -> GC : Buscar libro en memoria\n(libros[codigo])
+alt Libro encontrado
+    GC -> PS : RESP JSON\n{"status":"ok","msg":"Renovación recibida"}
+    note right of PS
+    El PS recibe una confirmación inmediata\nsin esperar la actualización real del libro.
+    end note
+
+    GC -> PUB : Publicar mensaje ZMQ\n"Renovacion {libro_json, fecha_nueva}"
+    deactivate GC
+
+    note over PUB, AR
+    Comunicación asíncrona mediante ZeroMQ.\nEl Gestor no espera respuesta del actor.
+    end note
+
+    activate AR
+    AR -> AR : Recibir mensaje de renovación
+    AR -> BD : Leer registro del libro
+    AR -> BD : Actualizar fecha_entrega = fecha_nueva
+    AR -> BD : Guardar cambios en "libros.txt"
+    AR --> AR : Mostrar mensaje en consola\n"Libro X renovado hasta fecha_nueva"
+    deactivate AR
+
+else Libro no encontrado
+    GC --> PS : RESP JSON\n{"status":"error","msg":"Libro no encontrado"}
+end
+
+== Fin del flujo ==
+note over GC, AR
+El evento de renovación se procesa\nde forma asíncrona y no bloqueante.
+end note
+@enduml
