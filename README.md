@@ -1,5 +1,9 @@
 # 📚 Biblioteca Distribuida – Universidad Ada Lovelace
 
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
+![ZeroMQ](https://img.shields.io/badge/Messaging-ZeroMQ-red?logo=zeromq)
+![Status](https://img.shields.io/badge/Estado-En%20Desarrollo-success?style=flat-square)
+
 ## Descripción del Proyecto
 
 Este proyecto implementa un **sistema de préstamo de libros distribuido** para estudiantes y profesores de la Universidad Ada Lovelace. El sistema permite realizar operaciones de:
