@@ -10,7 +10,7 @@ init(autoreset=True)
 # Configuración ZMQ
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")  # puerto del Gestor de Carga
+socket.connect("tcp://10.43.102.150:5555")  # puerto del Gestor de Carga
 
 solicitudes = []
 
