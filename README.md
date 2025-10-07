@@ -36,7 +36,8 @@ El sistema consta de cuatro tipos de procesos principales:
 
 ## Archivos y Estructura del Proyecto
 
-- `gestor_carga/gestor_carga.py`: Procesa todas las solicitudes y publica los eventos a los Actores.  
+- `gestor_carga/gestor_carga.py`: Procesa todas las solicitudes y publica los eventos a los Actores.
+- `gestor_almacenamiento/gestor_almacenamiento.py`: Administra la base de datos principal del sistema. Atiende solicitudes de lectura y actualización de los Actores (préstamo, renovación y devolución), garantizando consistencia y persistencia de los datos.  
 - `actores/actor_prestamo.py`: Atiende solicitudes de préstamo de manera síncrona.  
 - `actores/actor_renovacion.py`: Atiende renovaciones publicadas por el GC.  
 - `actores/actor_devolucion.py`: Atiende devoluciones publicadas por el GC.  
@@ -50,13 +51,17 @@ El sistema consta de cuatro tipos de procesos principales:
    ```bash
    python -m gestor_carga.gestor_carga
    ```  
-2. Iniciar los **Actores** (préstamo, renovación y devolución) en terminales separadas:  
+2. Iniciar el **Gestor de Almacenamiento (GA)**:  
+   ```bash
+   python -m gestor_almacenamiento.gestor_almacenamiento
+   ```
+3. Iniciar los **Actores** (préstamo, renovación y devolución) en terminales separadas:  
    ```bash
    python -m actores.actor_prestamo
    python -m actores.actor_renovacion
    python -m actores.actor_devolucion
    ```  
-3. Iniciar el **Proceso Solicitante (PS)** desde archivo o menú:  
+4. Iniciar el **Proceso Solicitante (PS)** desde archivo o menú:  
    ```bash
    python menu_interactivo.py
    ```
