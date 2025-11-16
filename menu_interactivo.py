@@ -3,6 +3,41 @@ import json
 import time
 from tabulate import tabulate
 from colorama import init, Fore, Style
+import sys
+
+
+# --- MODO AUTOMÁTICO PARA EVADE MENÚ ---
+if "--auto" in sys.argv:
+    idx = sys.argv.index("--auto")
+    archivo = sys.argv[idx + 1]
+
+    print(f"🚀 Modo automático activado. Enviando archivo: {archivo}")
+
+    # 1. Cargar archivo de solicitudes
+    try:
+        with open(archivo, "r", encoding="utf-8") as f:
+            solicitudes = [json.loads(line.strip()) for line in f.readlines() if line.strip()]
+        print(f"✔ {len(solicitudes)} solicitudes cargadas")
+    except Exception as e:
+        print(f"❌ Error cargando archivo: {e}")
+        sys.exit(1)
+
+
+
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://10.43.102.150:5555")
+
+    i = 1
+    for solicitud in solicitudes:
+        socket.send_json(solicitud)
+        resp = socket.recv_json()
+        print(f"[{i}] {solicitud['operacion']} {solicitud['codigo']} → {resp}")
+        i += 1
+
+    print("🏁 Finalizado modo automático.")
+    sys.exit(0)
+
 
 # Inicializar colorama
 init(autoreset=True)
