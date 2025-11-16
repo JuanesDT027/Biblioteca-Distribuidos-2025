@@ -104,25 +104,41 @@ while True:
             f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
         )
 
-    # ================================
+  
+       # ================================
     #        PRÉSTAMO
     # ================================
     elif operacion == "prestamo" and libro:
+        prestamo_socket = None
         try:
+            # Crear socket REQ para el actor de préstamo
             prestamo_socket = context.socket(zmq.REQ)
+            prestamo_socket.setsockopt(zmq.LINGER, 0)     # evita bloqueos al cerrar
+            prestamo_socket.RCVTIMEO = 5000               # timeout recv 5s
+            prestamo_socket.SNDTIMEO = 5000               # timeout send 5s
             prestamo_socket.connect("tcp://localhost:5557")
-            prestamo_socket.send_json({"codigo": codigo})
 
-            respuesta = prestamo_socket.recv_json()
-            rep_socket.send_json(respuesta)
+            payload = {"operacion": "prestamo", "codigo": codigo}
+            print(f"▶ Enviando a actor préstamo: {payload}")
+            prestamo_socket.send_json(payload)
 
-            prestamo_socket.close()
-
+            # Esperar respuesta
+            try:
+                respuesta = prestamo_socket.recv_json()
+                print(f"◀ Respuesta actor préstamo: {respuesta}")
+                rep_socket.send_json(respuesta)
+            except zmq.Again:
+                print("⚠️ Timeout esperando respuesta del actor préstamo (recv).")
+                rep_socket.send_json({"status": "error", "msg": "Timeout actor préstamo"})
         except Exception as e:
+            print(f"❌ Error enviando a actor préstamo: {e}")
             rep_socket.send_json({
                 "status": "error",
                 "msg": f"Error comunicando con actor de préstamo: {e}"
             })
+        finally:
+            if prestamo_socket is not None:
+                prestamo_socket.close()
 
     # ================================
     # CONSULTA DISPONIBILIDAD
