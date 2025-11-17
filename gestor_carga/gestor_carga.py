@@ -2,13 +2,23 @@ import time
 import zmq
 import json
 import csv
+import os
 from time import time as now
 from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
 
-# ================================
+# ======================================================
+#                CONFIGURACIÓN DEL MODO
+#     Cambia SOLO esta variable para elegir el tipo
+# ======================================================
+
+# MODO_METRICAS = "multihilo"
+MODO_METRICAS = "serial"     
+
+
+# ======================================================
 #  CONFIGURACIÓN ZMQ
-# ================================
+# ======================================================
 
 context = zmq.Context()
 
@@ -22,42 +32,47 @@ time.sleep(1)
 pub_socket = context.socket(zmq.PUB)
 pub_socket.bind("tcp://*:5556")
 
-# ================================
+# ======================================================
 # BASE DE DATOS SIMULADA
-# ================================
+# ======================================================
 
-libros = {}  # diccionario de libros en memoria
-
-# ================================
-# CARGAR LIBROS INICIALES
-# ================================
+libros = {}
 
 def cargar_libros():
     with open("data/libros.txt", "r", encoding="utf-8") as f:
         for line in f:
-            line = line.strip()
-            if not line:
+            if not line.strip():
                 continue
             try:
                 data = json.loads(line)
                 libros[data["codigo"]] = LibroUsuario(**data)
-            except json.JSONDecodeError as e:
-                print(f"⚠️ Error leyendo línea: {line}")
-                print(e)
+            except:
+                print("⚠️ Error leyendo línea:", line)
 
 cargar_libros()
 print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 
-# ================================
-# CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL)
-# ================================
-# SOLO DESCOMENTA EL EXPERIMENTO QUE VAS A CORRER
 
-NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
-#NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
-#NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
+# ======================================================
+#   CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL o MULTIHILO)
+# ======================================================
 
-# CREAR ARCHIVO Y ESCRIBIR ENCABEZADOS
+if MODO_METRICAS == "serial":
+    # Crear carpeta Serial si no existe
+    os.makedirs("data/Serial", exist_ok=True)
+
+    # SOLO descomenta la prueba que estás haciendo
+    NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
+    #NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
+    #NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
+
+else:  # MULTIHILO (como antes)
+    # SOLO descomenta la prueba multihilo correspondiente
+    NOMBRE_METRICAS = "data/metricas5Solicitudes_Multihilo.csv"
+    #NOMBRE_METRICAS = "data/metricas10Solicitudes_Multihilo.csv"
+    #NOMBRE_METRICAS = "data/metricas20Solicitudes_Multihilo.csv"
+
+# Crear archivo CSV
 with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow([
@@ -68,9 +83,12 @@ with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
         "codigo"
     ])
 
-# ================================
-# BUCLE PRINCIPAL
-# ================================
+print(f"📁 Guardando métricas en: {NOMBRE_METRICAS}")
+
+
+# ======================================================
+#                   BUCLE PRINCIPAL
+# ======================================================
 
 while True:
     t_inicio = now()
@@ -82,9 +100,7 @@ while True:
     libro = libros.get(codigo)
     print(f"\n📩 Operación recibida: {operacion} → {codigo}")
 
-    # ================================
     # DEVOLUCIÓN
-    # ================================
     if operacion == "devolucion" and libro:
         libro.prestado = False
         libro.ejemplares_disponibles += 1
@@ -92,21 +108,20 @@ while True:
         rep_socket.send_json({"status": "ok", "msg": "Devolución recibida"})
         pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
 
-    # ================================
     # RENOVACIÓN
-    # ================================
     elif operacion == "renovacion" and libro:
         nueva_fecha = datetime.now() + timedelta(weeks=1)
-        rep_socket.send_json({"status": "ok",
-                              "msg": f"Renovación hasta {nueva_fecha}"})
+
+        rep_socket.send_json({
+            "status": "ok",
+            "msg": f"Renovación hasta {nueva_fecha}"
+        })
 
         pub_socket.send_string(
             f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
         )
 
-    # ================================
     # PRÉSTAMO
-    # ================================
     elif operacion == "prestamo" and libro:
         prestamo_socket = None
         try:
@@ -116,30 +131,21 @@ while True:
             prestamo_socket.SNDTIMEO = 5000
             prestamo_socket.connect("tcp://localhost:5557")
 
-            payload = {"operacion": "prestamo", "codigo": codigo}
-            print(f"▶ Enviando a actor préstamo: {payload}")
-            prestamo_socket.send_json(payload)
+            prestamo_socket.send_json({"operacion": "prestamo", "codigo": codigo})
 
             try:
                 respuesta = prestamo_socket.recv_json()
-                print(f"◀ Respuesta actor préstamo: {respuesta}")
                 rep_socket.send_json(respuesta)
             except zmq.Again:
-                print("⚠️ Timeout esperando respuesta del actor préstamo (recv).")
                 rep_socket.send_json({"status": "error", "msg": "Timeout actor préstamo"})
+
         except Exception as e:
-            print(f"❌ Error enviando a actor préstamo: {e}")
-            rep_socket.send_json({
-                "status": "error",
-                "msg": f"Error comunicando con actor de préstamo: {e}"
-            })
+            rep_socket.send_json({"status": "error", "msg": str(e)})
         finally:
-            if prestamo_socket is not None:
+            if prestamo_socket:
                 prestamo_socket.close()
 
-    # ================================
-    # CONSULTA DISPONIBILIDAD
-    # ================================
+    # DISPONIBILIDAD
     elif operacion == "disponibilidad" and libro:
         rep_socket.send_json({
             "status": "ok",
@@ -148,18 +154,14 @@ while True:
             "titulo": libro.titulo
         })
 
-    # ================================
-    # ERROR / LIBRO NO EXISTE
-    # ================================
+    # ERROR
     else:
         rep_socket.send_json({
             "status": "error",
             "msg": f"Operación inválida o libro '{codigo}' no existe"
         })
 
-    # ================================
-    # REGISTRO DE MÉTRICAS
-    # ================================
+    # REGISTRO MÉTRICAS
     t_fin = now()
     tiempo_respuesta = t_fin - t_inicio
 
