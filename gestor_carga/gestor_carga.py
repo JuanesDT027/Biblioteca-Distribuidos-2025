@@ -28,7 +28,6 @@ pub_socket.bind("tcp://*:5556")
 
 libros = {}  # diccionario de libros en memoria
 
-
 # ================================
 # CARGAR LIBROS INICIALES
 # ================================
@@ -46,16 +45,20 @@ def cargar_libros():
                 print(f"⚠️ Error leyendo línea: {line}")
                 print(e)
 
-
 cargar_libros()
 print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 
-
 # ================================
-# ARCHIVO DE MÉTRICAS
+# CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL)
 # ================================
+# SOLO DESCOMENTA EL EXPERIMENTO QUE VAS A CORRER
 
-with open("metricas_gc.csv", "w", newline="", encoding="utf-8") as f:
+NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
+#NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
+#NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
+
+# CREAR ARCHIVO Y ESCRIBIR ENCABEZADOS
+with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow([
         "timestamp_llegada",
@@ -65,13 +68,11 @@ with open("metricas_gc.csv", "w", newline="", encoding="utf-8") as f:
         "codigo"
     ])
 
-
 # ================================
 # BUCLE PRINCIPAL
 # ================================
 
 while True:
-    # marcar tiempo de llegada
     t_inicio = now()
 
     mensaje_raw = rep_socket.recv_json()
@@ -82,7 +83,7 @@ while True:
     print(f"\n📩 Operación recibida: {operacion} → {codigo}")
 
     # ================================
-    #        DEVOLUCIÓN
+    # DEVOLUCIÓN
     # ================================
     if operacion == "devolucion" and libro:
         libro.prestado = False
@@ -92,37 +93,33 @@ while True:
         pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
 
     # ================================
-    #        RENOVACIÓN
+    # RENOVACIÓN
     # ================================
     elif operacion == "renovacion" and libro:
         nueva_fecha = datetime.now() + timedelta(weeks=1)
         rep_socket.send_json({"status": "ok",
                               "msg": f"Renovación hasta {nueva_fecha}"})
 
-
         pub_socket.send_string(
             f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
         )
 
-  
-       # ================================
-    #        PRÉSTAMO
+    # ================================
+    # PRÉSTAMO
     # ================================
     elif operacion == "prestamo" and libro:
         prestamo_socket = None
         try:
-            # Crear socket REQ para el actor de préstamo
             prestamo_socket = context.socket(zmq.REQ)
-            prestamo_socket.setsockopt(zmq.LINGER, 0)     # evita bloqueos al cerrar
-            prestamo_socket.RCVTIMEO = 5000               # timeout recv 5s
-            prestamo_socket.SNDTIMEO = 5000               # timeout send 5s
+            prestamo_socket.setsockopt(zmq.LINGER, 0)
+            prestamo_socket.RCVTIMEO = 5000
+            prestamo_socket.SNDTIMEO = 5000
             prestamo_socket.connect("tcp://localhost:5557")
 
             payload = {"operacion": "prestamo", "codigo": codigo}
             print(f"▶ Enviando a actor préstamo: {payload}")
             prestamo_socket.send_json(payload)
 
-            # Esperar respuesta
             try:
                 respuesta = prestamo_socket.recv_json()
                 print(f"◀ Respuesta actor préstamo: {respuesta}")
@@ -152,7 +149,7 @@ while True:
         })
 
     # ================================
-    # ERROR: OPERACIÓN O LIBRO NO EXISTE
+    # ERROR / LIBRO NO EXISTE
     # ================================
     else:
         rep_socket.send_json({
@@ -161,12 +158,12 @@ while True:
         })
 
     # ================================
-    #       REGISTRO DE MÉTRICAS
+    # REGISTRO DE MÉTRICAS
     # ================================
     t_fin = now()
     tiempo_respuesta = t_fin - t_inicio
 
-    with open("metricas_gc.csv", "a", newline="", encoding="utf-8") as f:
+    with open(NOMBRE_METRICAS, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
             t_inicio,
