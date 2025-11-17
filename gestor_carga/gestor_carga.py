@@ -28,7 +28,6 @@ pub_socket.bind("tcp://*:5556")
 
 libros = {}  # diccionario de libros en memoria
 
-
 # ================================
 # CARGAR LIBROS INICIALES
 # ================================
@@ -46,25 +45,17 @@ def cargar_libros():
                 print(f"⚠️ Error leyendo línea: {line}")
                 print(e)
 
-
 cargar_libros()
 print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
-
 
 # ================================
 # CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL)
 # ================================
-# SOLO DEBES DESCOMENTAR UNA LÍNEA SEGÚN EL EXPERIMENTO QUE VAS A CORRER
+# SOLO DESCOMENTA EL EXPERIMENTO QUE VAS A CORRER
 
-# ---- EXPERIMENTO SERIAL: 5 solicitudes por sede ----
-NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
-
-# ---- EXPERIMENTO SERIAL: 10 solicitudes por sede ----
- NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
-
-# ---- EXPERIMENTO SERIAL: 20 solicitudes por sede ----
- NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
-
+# NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
+NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
+# NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
 
 # CREAR ARCHIVO Y ESCRIBIR ENCABEZADOS
 with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
@@ -77,13 +68,11 @@ with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
         "codigo"
     ])
 
-
 # ================================
 # BUCLE PRINCIPAL
 # ================================
 
 while True:
-    # marcar tiempo de llegada
     t_inicio = now()
 
     mensaje_raw = rep_socket.recv_json()
@@ -94,7 +83,7 @@ while True:
     print(f"\n📩 Operación recibida: {operacion} → {codigo}")
 
     # ================================
-    #        DEVOLUCIÓN
+    # DEVOLUCIÓN
     # ================================
     if operacion == "devolucion" and libro:
         libro.prestado = False
@@ -104,7 +93,7 @@ while True:
         pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
 
     # ================================
-    #        RENOVACIÓN
+    # RENOVACIÓN
     # ================================
     elif operacion == "renovacion" and libro:
         nueva_fecha = datetime.now() + timedelta(weeks=1)
@@ -116,12 +105,11 @@ while True:
         )
 
     # ================================
-    #        PRÉSTAMO
+    # PRÉSTAMO
     # ================================
     elif operacion == "prestamo" and libro:
         prestamo_socket = None
         try:
-            # Crear socket REQ para el actor de préstamo
             prestamo_socket = context.socket(zmq.REQ)
             prestamo_socket.setsockopt(zmq.LINGER, 0)
             prestamo_socket.RCVTIMEO = 5000
@@ -161,7 +149,7 @@ while True:
         })
 
     # ================================
-    # ERROR: OPERACIÓN O LIBRO NO EXISTE
+    # ERROR / LIBRO NO EXISTE
     # ================================
     else:
         rep_socket.send_json({
@@ -170,7 +158,7 @@ while True:
         })
 
     # ================================
-    #       REGISTRO DE MÉTRICAS
+    # REGISTRO DE MÉTRICAS
     # ================================
     t_fin = now()
     tiempo_respuesta = t_fin - t_inicio
