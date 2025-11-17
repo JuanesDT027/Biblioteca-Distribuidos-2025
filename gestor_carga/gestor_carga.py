@@ -52,10 +52,22 @@ print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 
 
 # ================================
-# ARCHIVO DE MÉTRICAS
+# CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL)
 # ================================
+# SOLO DEBES DESCOMENTAR UNA LÍNEA SEGÚN EL EXPERIMENTO QUE VAS A CORRER
 
-with open("metricas_gc.csv", "w", newline="", encoding="utf-8") as f:
+# ---- EXPERIMENTO SERIAL: 5 solicitudes por sede ----
+NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
+
+# ---- EXPERIMENTO SERIAL: 10 solicitudes por sede ----
+ NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
+
+# ---- EXPERIMENTO SERIAL: 20 solicitudes por sede ----
+ NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
+
+
+# CREAR ARCHIVO Y ESCRIBIR ENCABEZADOS
+with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow([
         "timestamp_llegada",
@@ -99,13 +111,11 @@ while True:
         rep_socket.send_json({"status": "ok",
                               "msg": f"Renovación hasta {nueva_fecha}"})
 
-
         pub_socket.send_string(
             f"Renovacion {json.dumps({'libro': libro.to_dict(), 'fecha_nueva': str(nueva_fecha)})}"
         )
 
-  
-       # ================================
+    # ================================
     #        PRÉSTAMO
     # ================================
     elif operacion == "prestamo" and libro:
@@ -113,16 +123,15 @@ while True:
         try:
             # Crear socket REQ para el actor de préstamo
             prestamo_socket = context.socket(zmq.REQ)
-            prestamo_socket.setsockopt(zmq.LINGER, 0)     # evita bloqueos al cerrar
-            prestamo_socket.RCVTIMEO = 5000               # timeout recv 5s
-            prestamo_socket.SNDTIMEO = 5000               # timeout send 5s
+            prestamo_socket.setsockopt(zmq.LINGER, 0)
+            prestamo_socket.RCVTIMEO = 5000
+            prestamo_socket.SNDTIMEO = 5000
             prestamo_socket.connect("tcp://localhost:5557")
 
             payload = {"operacion": "prestamo", "codigo": codigo}
             print(f"▶ Enviando a actor préstamo: {payload}")
             prestamo_socket.send_json(payload)
 
-            # Esperar respuesta
             try:
                 respuesta = prestamo_socket.recv_json()
                 print(f"◀ Respuesta actor préstamo: {respuesta}")
@@ -166,7 +175,7 @@ while True:
     t_fin = now()
     tiempo_respuesta = t_fin - t_inicio
 
-    with open("metricas_gc.csv", "a", newline="", encoding="utf-8") as f:
+    with open(NOMBRE_METRICAS, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
             t_inicio,
