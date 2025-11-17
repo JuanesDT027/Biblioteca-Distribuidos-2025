@@ -53,9 +53,9 @@ print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 # ================================
 # SOLO DESCOMENTA EL EXPERIMENTO QUE VAS A CORRER
 
-# NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
-NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
-# NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
+NOMBRE_METRICAS = "data/Serial/metricas5Solicitudes_Serial.csv"
+#NOMBRE_METRICAS = "data/Serial/metricas10Solicitudes_Serial.csv"
+#NOMBRE_METRICAS = "data/Serial/metricas20Solicitudes_Serial.csv"
 
 # CREAR ARCHIVO Y ESCRIBIR ENCABEZADOS
 with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
