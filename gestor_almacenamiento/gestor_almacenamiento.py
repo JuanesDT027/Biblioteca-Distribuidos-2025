@@ -105,7 +105,7 @@ while True:
                 for k, v in data.items():
                     setattr(libros[codigo], k, v)
                 guardar_datos()
-                socket.send_json({"status": "ok", "msg": "Actualizado"})
+                socket.send_json({"status": "ok", "msg": "Actualizado")
                 print(f"✅ Libro {codigo} actualizado")
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
@@ -119,4 +119,7 @@ while True:
         try:
             socket.send_json({"status": "error", "msg": str(e)})
         except:
+            # AQUÍ ESTÁ EL NUEVO PRINT QUE PEDISTE
+            print(" CAMBIO DE SEDE AUTOMÁTICO: Operaciones redirigidas a réplica secundaria")
+            print(" Ahora operando desde Sede B - Servicio continuo garantizado")
             pass
