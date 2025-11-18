@@ -5,6 +5,7 @@ import os
 from common.LibroUsuario import LibroUsuario
 
 ARCHIVO_PRINCIPAL = "data/libros.txt"
+ARCHIVO_REPLICA = "data/libros_replica.txt"  # Archivo de réplica
 LOCK = threading.Lock()
 
 context = zmq.Context()
@@ -12,22 +13,76 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5560")
 
 libros = {}
-if os.path.exists(ARCHIVO_PRINCIPAL):
-    with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                data = json.loads(line)
-                libros[data["codigo"]] = LibroUsuario(**data)
 
-print("✅ Gestor de Almacenamiento (GA) operativo.")
+# Función para cargar datos desde archivo principal o réplica
+def cargar_datos():
+    global libros
+    libros = {}
+    
+    # Primero intentar cargar desde archivo principal
+    if os.path.exists(ARCHIVO_PRINCIPAL):
+        try:
+            with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        libros[data["codigo"]] = LibroUsuario(**data)
+            print("✅ Datos cargados desde archivo principal")
+            return True
+        except Exception as e:
+            print(f"⚠️ Error cargando archivo principal: {e}")
+    
+    # Si falla, cargar desde réplica secundaria
+    if os.path.exists(ARCHIVO_REPLICA):
+        try:
+            with open(ARCHIVO_REPLICA, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        libros[data["codigo"]] = LibroUsuario(**data)
+            print("🔄 FALLOVER ACTIVADO: Cargando datos desde réplica secundaria")
+            print("🚨 SISTEMA CONTINÚA OPERANDO CON RÉPLICA - Failover exitoso")
+            return True
+        except Exception as e:
+            print(f"❌ Error cargando réplica secundaria: {e}")
+    
+    return False
+
+# Cargar datos al inicio
+if cargar_datos():
+    print("✅ Gestor de Almacenamiento (GA) operativo.")
+else:
+    print("❌ No se pudieron cargar datos ni del archivo principal ni de la réplica")
+    libros = {}
 
 def guardar_datos():
-    """Guarda los cambios en el archivo principal."""
+    """Guarda los cambios en el archivo principal y réplica."""
     with LOCK:
-        with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
-            for l in libros.values():
-                f.write(json.dumps(l.to_dict()) + "\n")
-    print("💾 Datos actualizados correctamente en libros.txt")
+        try:
+            # Guardar en archivo principal
+            with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
+                for l in libros.values():
+                    f.write(json.dumps(l.to_dict()) + "\n")
+            
+            # Replicar en archivo secundario
+            with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
+                for l in libros.values():
+                    f.write(json.dumps(l.to_dict()) + "\n")
+                    
+            print("💾 Datos actualizados correctamente en archivo principal y réplica")
+            
+        except Exception as e:
+            print(f"⚠️ Error guardando en archivo principal: {e}")
+            print("🔄 Intentando guardar solo en réplica secundaria...")
+            
+            try:
+                # Fallback: guardar solo en réplica
+                with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
+                    for l in libros.values():
+                        f.write(json.dumps(l.to_dict()) + "\n")
+                print("✅ Datos guardados en réplica secundaria (modo degradado)")
+            except Exception as e2:
+                print(f"❌ Error crítico: No se pudo guardar en ninguna réplica: {e2}")
 
 while True:
     try:
