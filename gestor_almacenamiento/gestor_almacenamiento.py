@@ -2,6 +2,7 @@ import zmq
 import json
 import threading
 import os
+import time
 from common.LibroUsuario import LibroUsuario
 
 ARCHIVO_PRINCIPAL = "data/libros.txt"
@@ -17,6 +18,7 @@ libros = {}
 def cargar_datos():
     global libros
     libros = {}
+    
     if os.path.exists(ARCHIVO_PRINCIPAL):
         try:
             with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
@@ -24,16 +26,15 @@ def cargar_datos():
                     if line.strip():
                         data = json.loads(line)
                         libros[data["codigo"]] = LibroUsuario(**data)
-            print("✅ GA PRIMARIO: Datos cargados desde archivo principal")
+            print("✅ GA Principal: Datos cargados desde archivo principal")
             return True
         except Exception as e:
-            print(f"❌ Error cargando archivo principal: {e}")
+            print(f"⚠️ GA Principal: Error cargando archivo principal: {e}")
+    
     return False
 
-cargar_datos()
-print("🚀 GESTOR DE ALMACENAMIENTO PRIMARIO iniciado en puerto 5560")
-
 def guardar_datos():
+    """Guarda los cambios en el archivo principal y réplica"""
     with LOCK:
         try:
             # Guardar en archivo principal
@@ -41,15 +42,22 @@ def guardar_datos():
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
             
-            # Sincronizar con réplica
+            # Replicar en archivo secundario
             with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
                     
-            print("💾 GA PRIMARIO: Datos actualizados y replicados")
+            print("💾 GA Principal: Datos actualizados en principal y réplica")
             
         except Exception as e:
-            print(f"⚠️ Error guardando datos: {e}")
+            print(f"❌ GA Principal: Error guardando datos: {e}")
+
+# Cargar datos al inicio
+if cargar_datos():
+    print("✅ Gestor de Almacenamiento Principal operativo.")
+else:
+    print("❌ GA Principal: No se pudieron cargar datos iniciales")
+    libros = {}
 
 while True:
     try:
@@ -62,27 +70,30 @@ while True:
             libro = libros.get(codigo)
             if libro:
                 socket.send_json({"status": "ok", "libro": libro.to_dict()})
-                print(f"📖 GA PRIMARIO: Enviado libro {codigo}")
+                print(f"📖 GA Principal: Enviado libro {codigo}")
             else:
                 socket.send_json({"status": "error", "msg": "No encontrado"})
-                print(f"❌ GA PRIMARIO: Libro {codigo} no encontrado")
+                print(f"❌ GA Principal: Libro {codigo} no encontrado")
 
         elif op == "actualizar":
             if codigo in libros:
                 for k, v in data.items():
                     setattr(libros[codigo], k, v)
                 guardar_datos()
-                socket.send_json({"status": "ok", "msg": "Actualizado en GA primario"})
-                print(f"✅ GA PRIMARIO: Libro {codigo} actualizado")
+                socket.send_json({"status": "ok", "msg": "Actualizado"})
+                print(f"✅ GA Principal: Libro {codigo} actualizado")
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
-                print(f"⚠️ GA PRIMARIO: Código {codigo} inexistente")
+                print(f"⚠️ GA Principal: Código {codigo} inexistente")
+
+        elif op == "ping":
+            socket.send_json({"status": "ok", "msg": "pong"})
 
         else:
-            socket.send_json({"status": "error", "msg": "Operación inválida"})
+            socket.send_json({"status": "error", "msg": f"Operación '{op}' no válida"})
 
     except Exception as e:
-        print(f"❌ Error GA PRIMARIO: {e}")
+        print(f"❌ Error GA Principal: {e}")
         try:
             socket.send_json({"status": "error", "msg": str(e)})
         except:

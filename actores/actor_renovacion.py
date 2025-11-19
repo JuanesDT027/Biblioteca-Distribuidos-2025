@@ -5,45 +5,43 @@ from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
 
 context = zmq.Context()
-
-# Socket SUB
 sub_socket = context.socket(zmq.SUB)
 sub_socket.connect("tcp://10.43.102.150:5556")
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Renovacion")
 
-# Configuración de GA con failover
-GA_PRIMARIO = "tcp://10.43.102.150:5560"
-GA_REPLICA = "tcp://10.43.102.150:5561"
+# Sockets para GA principal y réplica
+ga_socket_principal = context.socket(zmq.REQ)
+ga_socket_principal.connect("tcp://10.43.102.150:5560")
+ga_socket_principal.RCVTIMEO = 3000
 
-ga_actual = GA_PRIMARIO
+ga_socket_replica = context.socket(zmq.REQ)
+ga_socket_replica.connect("tcp://10.43.102.150:5561")
+ga_socket_replica.RCVTIMEO = 3000
+
 USANDO_REPLICA = False
-
-def conectar_ga():
-    global ga_socket, USANDO_REPLICA
-    ga_socket = context.socket(zmq.REQ)
-    ga_socket.RCVTIMEO = 3000
-    ga_socket.connect(ga_actual)
-    
-    if USANDO_REPLICA:
-        print(f"🔄 Actor Renovación conectado a RÉPLICA SECUNDARIA")
-    else:
-        print(f"✅ Actor Renovación conectado al GA PRIMARIO")
-
-def intentar_failover():
-    global ga_actual, USANDO_REPLICA
-    if not USANDO_REPLICA:
-        print("🚨 FALLO DETECTADO - Cambiando a réplica secundaria...")
-        ga_actual = GA_REPLICA
-        USANDO_REPLICA = True
-        conectar_ga()
-        print("📍 Renovaciones ahora en SEDE SECUNDARIA")
-        return True
-    return False
-
-# Conexión inicial
-conectar_ga()
-
 contador_renovaciones = {}
+print("✅ Actor Renovación conectado a GA Principal y Réplica...")
+
+def enviar_a_ga(mensaje):
+    """Envía mensaje al GA activo con failover automático"""
+    global USANDO_REPLICA
+    
+    if not USANDO_REPLICA:
+        try:
+            ga_socket_principal.send_json(mensaje)
+            respuesta = ga_socket_principal.recv_json()
+            return respuesta
+        except zmq.Again:
+            print("⚠️ GA Principal no responde - Cambiando a réplica...")
+            USANDO_REPLICA = True
+            print("🔄 FAILOVER: Usando Réplica Secundaria")
+    
+    try:
+        ga_socket_replica.send_json(mensaje)
+        respuesta = ga_socket_replica.recv_json()
+        return respuesta
+    except zmq.Again:
+        raise Exception("Ambos GA no responden")
 
 while True:
     mensaje_raw = sub_socket.recv_string()
@@ -53,21 +51,15 @@ while True:
 
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
-        ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
-        print(f"\n📙 Solicitud de renovación recibida → {codigo} [{ubicacion}]")
+        fuente = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
+        print(f"\n📙 Renovación recibida → {codigo} (GA: {fuente})")
 
-        # Leer datos del libro con reintentos
-        for intento in range(2):
-            try:
-                ga_socket.send_json({"operacion": "leer", "codigo": codigo})
-                respuesta = ga_socket.recv_json()
-                break
-            except zmq.Again:
-                print(f"⚠️ GA no respondió (lectura - intento {intento + 1}).")
-                if intento == 0 and intentar_failover():
-                    continue
-                else:
-                    continue
+        # Leer datos del libro desde GA
+        try:
+            respuesta = enviar_a_ga({"operacion": "leer", "codigo": codigo})
+        except Exception as e:
+            print(f"⚠️ Error comunicando con GA: {e}")
+            continue
 
         if respuesta["status"] != "ok":
             print(f"❌ Libro {codigo} no encontrado en GA.")
@@ -93,23 +85,19 @@ while True:
         nueva_fecha_fmt = nueva_fecha.strftime("%Y-%m-%d")
 
         # Actualizar en GA
-        ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
-        print(f"✏️ Actualizando fecha_entrega → {nueva_fecha_fmt} en GA [{ubicacion}]...")
-        
-        try:
-            ga_socket.send_json({
-                "operacion": "actualizar",
-                "codigo": codigo,
-                "data": {"fecha_entrega": nueva_fecha_fmt}
-            })
+        actualizar_msg = {
+            "operacion": "actualizar",
+            "codigo": codigo,
+            "data": {"fecha_entrega": nueva_fecha_fmt}
+        }
 
-            resp = ga_socket.recv_json()
+        try:
+            resp = enviar_a_ga(actualizar_msg)
             if resp["status"] == "ok":
                 contador_renovaciones[codigo] = renovaciones_previas + 1
-                ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
-                print(f"✅ '{libro.titulo}' renovado hasta {nueva_fecha_fmt} "
-                      f"(renovaciones: {contador_renovaciones[codigo]}/2) [{ubicacion}].")
+                fuente = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
+                print(f"✅ '{libro.titulo}' renovado hasta {nueva_fecha_fmt} (GA: {fuente})")
             else:
                 print(f"⚠️ Error al actualizar: {resp['msg']}")
-        except zmq.Again:
-            print("⚠️ GA no respondió (actualización).")
+        except Exception as e:
+            print(f"⚠️ Error actualizando GA: {e}")
