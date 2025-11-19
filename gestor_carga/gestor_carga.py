@@ -129,7 +129,7 @@ while True:
             prestamo_socket.setsockopt(zmq.LINGER, 0)
             prestamo_socket.RCVTIMEO = 5000
             prestamo_socket.SNDTIMEO = 5000
-            prestamo_socket.connect("tcp://localhost:5557")
+            prestamo_socket.connect("tcp://10.195.41.111:5557")
 
             prestamo_socket.send_json({"operacion": "prestamo", "codigo": codigo})
 
