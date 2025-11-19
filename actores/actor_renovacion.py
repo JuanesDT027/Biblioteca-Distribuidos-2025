@@ -1,28 +1,48 @@
-# ======================================
-# actores/actor_renovacion.py
-# ======================================
 import zmq
 import json
 import time
 from datetime import datetime, timedelta
 from common.LibroUsuario import LibroUsuario
 
-# Crear contexto ZMQ
 context = zmq.Context()
 
-# Socket SUB: recibe publicaciones del Gestor de Carga (GC)
+# Socket SUB
 sub_socket = context.socket(zmq.SUB)
 sub_socket.connect("tcp://10.43.102.150:5556")
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Renovacion")
 
-# Socket REQ: comunica con el Gestor de Almacenamiento (GA)
-ga_socket = context.socket(zmq.REQ)
-ga_socket.connect("tcp://10.43.102.150:5560")
-ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
+# Configuración de GA con failover
+GA_PRIMARIO = "tcp://10.43.102.150:5560"
+GA_REPLICA = "tcp://10.43.102.150:5561"
 
-print("✅ Actor Renovación conectado al Gestor de Almacenamiento (GA)...")
+ga_actual = GA_PRIMARIO
+USANDO_REPLICA = False
 
-# Estructura para llevar el conteo de renovaciones
+def conectar_ga():
+    global ga_socket, USANDO_REPLICA
+    ga_socket = context.socket(zmq.REQ)
+    ga_socket.RCVTIMEO = 3000
+    ga_socket.connect(ga_actual)
+    
+    if USANDO_REPLICA:
+        print(f"🔄 Actor Renovación conectado a RÉPLICA SECUNDARIA")
+    else:
+        print(f"✅ Actor Renovación conectado al GA PRIMARIO")
+
+def intentar_failover():
+    global ga_actual, USANDO_REPLICA
+    if not USANDO_REPLICA:
+        print("🚨 FALLO DETECTADO - Cambiando a réplica secundaria...")
+        ga_actual = GA_REPLICA
+        USANDO_REPLICA = True
+        conectar_ga()
+        print("📍 Renovaciones ahora en SEDE SECUNDARIA")
+        return True
+    return False
+
+# Conexión inicial
+conectar_ga()
+
 contador_renovaciones = {}
 
 while True:
@@ -33,15 +53,21 @@ while True:
 
     if topico == "Renovacion" and libro_data:
         codigo = libro_data["codigo"]
-        print(f"\n📙 Solicitud de renovación recibida → {codigo}")
+        ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
+        print(f"\n📙 Solicitud de renovación recibida → {codigo} [{ubicacion}]")
 
-        # 1️⃣ Leer datos del libro desde GA
-        ga_socket.send_json({"operacion": "leer", "codigo": codigo})
-        try:
-            respuesta = ga_socket.recv_json()
-        except zmq.Again:
-            print("⚠️ GA no respondió (lectura).")
-            continue
+        # Leer datos del libro con reintentos
+        for intento in range(2):
+            try:
+                ga_socket.send_json({"operacion": "leer", "codigo": codigo})
+                respuesta = ga_socket.recv_json()
+                break
+            except zmq.Again:
+                print(f"⚠️ GA no respondió (lectura - intento {intento + 1}).")
+                if intento == 0 and intentar_failover():
+                    continue
+                else:
+                    continue
 
         if respuesta["status"] != "ok":
             print(f"❌ Libro {codigo} no encontrado en GA.")
@@ -67,19 +93,22 @@ while True:
         nueva_fecha_fmt = nueva_fecha.strftime("%Y-%m-%d")
 
         # Actualizar en GA
-        print(f"✏️ Actualizando fecha_entrega → {nueva_fecha_fmt} en GA...")
-        ga_socket.send_json({
-            "operacion": "actualizar",
-            "codigo": codigo,
-            "data": {"fecha_entrega": nueva_fecha_fmt}
-        })
-
+        ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
+        print(f"✏️ Actualizando fecha_entrega → {nueva_fecha_fmt} en GA [{ubicacion}]...")
+        
         try:
+            ga_socket.send_json({
+                "operacion": "actualizar",
+                "codigo": codigo,
+                "data": {"fecha_entrega": nueva_fecha_fmt}
+            })
+
             resp = ga_socket.recv_json()
             if resp["status"] == "ok":
                 contador_renovaciones[codigo] = renovaciones_previas + 1
+                ubicacion = "RÉPLICA" if USANDO_REPLICA else "PRINCIPAL"
                 print(f"✅ '{libro.titulo}' renovado hasta {nueva_fecha_fmt} "
-                      f"(renovaciones: {contador_renovaciones[codigo]}/2).")
+                      f"(renovaciones: {contador_renovaciones[codigo]}/2) [{ubicacion}].")
             else:
                 print(f"⚠️ Error al actualizar: {resp['msg']}")
         except zmq.Again:

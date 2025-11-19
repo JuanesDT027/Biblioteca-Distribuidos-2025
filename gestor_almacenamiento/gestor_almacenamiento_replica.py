@@ -4,52 +4,43 @@ import threading
 import os
 from common.LibroUsuario import LibroUsuario
 
-ARCHIVO_PRINCIPAL = "data/libros.txt"
 ARCHIVO_REPLICA = "data/libros_replica.txt"
 LOCK = threading.Lock()
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
-socket.bind("tcp://*:5560")
+socket.bind("tcp://*:5561")  # Puerto diferente para la réplica
 
 libros = {}
 
 def cargar_datos():
     global libros
     libros = {}
-    if os.path.exists(ARCHIVO_PRINCIPAL):
+    if os.path.exists(ARCHIVO_REPLICA):
         try:
-            with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
+            with open(ARCHIVO_REPLICA, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         data = json.loads(line)
                         libros[data["codigo"]] = LibroUsuario(**data)
-            print("✅ GA PRIMARIO: Datos cargados desde archivo principal")
+            print("✅ Réplica secundaria cargada y operativa")
             return True
         except Exception as e:
-            print(f"❌ Error cargando archivo principal: {e}")
+            print(f"❌ Error cargando réplica: {e}")
     return False
 
 cargar_datos()
-print("🚀 GESTOR DE ALMACENAMIENTO PRIMARIO iniciado en puerto 5560")
+print("🔄 GESTOR DE ALMACENAMIENTO RÉPLICA iniciado en puerto 5561")
 
 def guardar_datos():
     with LOCK:
         try:
-            # Guardar en archivo principal
-            with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
-                for l in libros.values():
-                    f.write(json.dumps(l.to_dict()) + "\n")
-            
-            # Sincronizar con réplica
             with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
-                    
-            print("💾 GA PRIMARIO: Datos actualizados y replicados")
-            
+            print("💾 Datos guardados en réplica secundaria")
         except Exception as e:
-            print(f"⚠️ Error guardando datos: {e}")
+            print(f"❌ Error guardando en réplica: {e}")
 
 while True:
     try:
@@ -62,27 +53,25 @@ while True:
             libro = libros.get(codigo)
             if libro:
                 socket.send_json({"status": "ok", "libro": libro.to_dict()})
-                print(f"📖 GA PRIMARIO: Enviado libro {codigo}")
+                print(f"📖 Réplica: Enviado libro {codigo}")
             else:
                 socket.send_json({"status": "error", "msg": "No encontrado"})
-                print(f"❌ GA PRIMARIO: Libro {codigo} no encontrado")
 
         elif op == "actualizar":
             if codigo in libros:
                 for k, v in data.items():
                     setattr(libros[codigo], k, v)
                 guardar_datos()
-                socket.send_json({"status": "ok", "msg": "Actualizado en GA primario"})
-                print(f"✅ GA PRIMARIO: Libro {codigo} actualizado")
+                socket.send_json({"status": "ok", "msg": "Actualizado en réplica"})
+                print(f"✅ Réplica: Libro {codigo} actualizado")
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
-                print(f"⚠️ GA PRIMARIO: Código {codigo} inexistente")
 
         else:
             socket.send_json({"status": "error", "msg": "Operación inválida"})
 
     except Exception as e:
-        print(f"❌ Error GA PRIMARIO: {e}")
+        print(f"❌ Error en réplica: {e}")
         try:
             socket.send_json({"status": "error", "msg": str(e)})
         except:
