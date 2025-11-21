@@ -15,9 +15,8 @@ from common.LibroUsuario import LibroUsuario
 # MODO_METRICAS = "multihilo"
 MODO_METRICAS = "serial"     
 
-
 # ======================================================
-#  CONFIGURACIÓN ZMQ
+#  CONFIGURACIÓN ZMQ Y FAILOVER
 # ======================================================
 
 context = zmq.Context()
@@ -31,6 +30,14 @@ time.sleep(1)
 # PUB → envía eventos a actores
 pub_socket = context.socket(zmq.PUB)
 pub_socket.bind("tcp://*:5556")
+
+# ======================================================
+# CONFIGURACIÓN FAILOVER GA
+# ======================================================
+
+GA_PRIMARIO = "tcp://localhost:5560"
+GA_REPLICA = "tcp://localhost:5561"
+ga_actual = GA_PRIMARIO
 
 # ======================================================
 # BASE DE DATOS SIMULADA
@@ -52,6 +59,56 @@ def cargar_libros():
 cargar_libros()
 print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 
+# ======================================================
+#   FUNCIONES DE FAILOVER
+# ======================================================
+
+def conectar_ga():
+    """Conecta al GA actual y maneja failover automático"""
+    global ga_actual
+    
+    ga_socket = context.socket(zmq.REQ)
+    ga_socket.setsockopt(zmq.LINGER, 0)
+    ga_socket.RCVTIMEO = 3000  # Timeout reducido para failover rápido
+    ga_socket.SNDTIMEO = 3000
+    
+    try:
+        ga_socket.connect(ga_actual)
+        return ga_socket
+    except Exception as e:
+        print(f"❌ Error conectando a GA en {ga_actual}: {e}")
+        return None
+
+def verificar_disponibilidad_ga():
+    """Verifica si el GA actual está disponible"""
+    global ga_actual
+    
+    ga_socket = conectar_ga()
+    if not ga_socket:
+        return False
+    
+    try:
+        # Enviar ping al GA
+        ga_socket.send_json({"operacion": "leer", "codigo": "TEST"})
+        ga_socket.recv_json()
+        return True
+    except:
+        return False
+    finally:
+        if ga_socket:
+            ga_socket.close()
+
+def realizar_failover_si_necesario():
+    """Realiza failover automático si el GA primario no responde"""
+    global ga_actual
+    
+    if ga_actual == GA_PRIMARIO:
+        if not verificar_disponibilidad_ga():
+            print("🔄 DETECTANDO FALLO DEL GA PRIMARIO - INICIANDO FALLOVER...")
+            ga_actual = GA_REPLICA
+            print("✅ FAILOVER COMPLETADO - Usando RÉPLICA SECUNDARIA")
+            return True
+    return False
 
 # ======================================================
 #   CONFIGURACIÓN ARCHIVO DE MÉTRICAS (SERIAL o MULTIHILO)
@@ -80,7 +137,8 @@ with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
         "timestamp_salida",
         "tiempo_respuesta",
         "operacion",
-        "codigo"
+        "codigo",
+        "replica_utilizada"  # Nueva columna para métricas de failover
     ])
 
 print(f"📁 Guardando métricas en: {NOMBRE_METRICAS}")
@@ -100,21 +158,32 @@ while True:
     libro = libros.get(codigo)
     print(f"\n📩 Operación recibida: {operacion} → {codigo}")
 
+    # Verificar failover antes de procesar la operación
+    replica_utilizada = realizar_failover_si_necesario() or (ga_actual == GA_REPLICA)
+
     # DEVOLUCIÓN
     if operacion == "devolucion" and libro:
         libro.prestado = False
         libro.ejemplares_disponibles += 1
 
-        rep_socket.send_json({"status": "ok", "msg": "Devolución recibida"})
+        mensaje_respuesta = "Devolución recibida"
+        if replica_utilizada:
+            mensaje_respuesta += " [Procesado en RÉPLICA SECUNDARIA - FAILOVER]"
+
+        rep_socket.send_json({"status": "ok", "msg": mensaje_respuesta})
         pub_socket.send_string(f"Devolucion {json.dumps(libro.to_dict())}")
 
     # RENOVACIÓN
     elif operacion == "renovacion" and libro:
         nueva_fecha = datetime.now() + timedelta(weeks=1)
 
+        mensaje_respuesta = f"Renovación hasta {nueva_fecha}"
+        if replica_utilizada:
+            mensaje_respuesta += " [Procesado en RÉPLICA SECUNDARIA - FAILOVER]"
+
         rep_socket.send_json({
             "status": "ok",
-            "msg": f"Renovación hasta {nueva_fecha}"
+            "msg": mensaje_respuesta
         })
 
         pub_socket.send_string(
@@ -131,34 +200,59 @@ while True:
             prestamo_socket.SNDTIMEO = 5000
             prestamo_socket.connect("tcp://localhost:5557")
 
-            prestamo_socket.send_json({"operacion": "prestamo", "codigo": codigo})
+            # Agregar información de failover al mensaje para el actor
+            mensaje_prestamo = {"operacion": "prestamo", "codigo": codigo}
+            if replica_utilizada:
+                mensaje_prestamo["failover_activo"] = True
+
+            prestamo_socket.send_json(mensaje_prestamo)
 
             try:
                 respuesta = prestamo_socket.recv_json()
+                
+                # Agregar información de réplica si es necesario
+                if replica_utilizada and respuesta["status"] == "ok":
+                    respuesta["msg"] += " [Operación realizada en RÉPLICA SECUNDARIA - FAILOVER EXITOSO]"
+                
                 rep_socket.send_json(respuesta)
             except zmq.Again:
-                rep_socket.send_json({"status": "error", "msg": "Timeout actor préstamo"})
+                error_msg = "Timeout actor préstamo"
+                if replica_utilizada:
+                    error_msg += " [Intentado en RÉPLICA SECUNDARIA]"
+                rep_socket.send_json({"status": "error", "msg": error_msg})
 
         except Exception as e:
-            rep_socket.send_json({"status": "error", "msg": str(e)})
+            error_msg = str(e)
+            if replica_utilizada:
+                error_msg += " [Intentado en RÉPLICA SECUNDARIA]"
+            rep_socket.send_json({"status": "error", "msg": error_msg})
         finally:
             if prestamo_socket:
                 prestamo_socket.close()
 
     # DISPONIBILIDAD
     elif operacion == "disponibilidad" and libro:
-        rep_socket.send_json({
+        mensaje_respuesta = {
             "status": "ok",
             "ejemplares_disponibles": libro.ejemplares_disponibles,
             "codigo": libro.codigo,
             "titulo": libro.titulo
-        })
+        }
+        
+        if replica_utilizada:
+            mensaje_respuesta["msg"] = "Consulta realizada en RÉPLICA SECUNDARIA - FAILOVER"
+        
+        rep_socket.send_json(mensaje_respuesta)
 
     # ERROR
     else:
+        error_msg = f"Operación inválida o libro '{codigo}' no existe"
+        if replica_utilizada:
+            error_msg += " [Consultado en RÉPLICA SECUNDARIA]"
+            
         rep_socket.send_json({
             "status": "error",
-            "msg": f"Operación inválida o libro '{codigo}' no existe"
+            "msg": error_msg
         })
 
     # REGISTRO MÉTRICAS
@@ -172,7 +266,10 @@ while True:
             t_fin,
             tiempo_respuesta,
             operacion,
-            codigo
+            codigo,
+            "REPLICA" if replica_utilizada else "PRIMARIO"  # Nueva métrica
         ])
 
     print(f"⏱ Tiempo de respuesta: {tiempo_respuesta:.4f}s")
+    if replica_utilizada:
+        print("🔄 OPERACIÓN REALIZADA EN RÉPLICA SECUNDARIA - FAILOVER ACTIVO")

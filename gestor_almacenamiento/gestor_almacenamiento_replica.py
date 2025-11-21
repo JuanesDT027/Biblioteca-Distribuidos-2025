@@ -5,149 +5,93 @@ import os
 import time
 from common.LibroUsuario import LibroUsuario
 
+ARCHIVO_PRINCIPAL = "data/libros.txt"
 ARCHIVO_REPLICA = "data/libros_replica.txt"
 LOCK = threading.Lock()
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
-socket.bind("tcp://*:5561")  # Puerto diferente para la réplica
+socket.bind("tcp://*:5561")  # Réplica en puerto 5561
 
+# Variable global para indicar si este GA es primario o réplica
+ES_PRIMARIO = False
 libros = {}
-REPLICA_ACTIVA = False
 
-def cargar_datos_desde_principal():
-    """Intenta cargar datos desde el GA principal"""
+def cargar_datos():
     global libros
-    ARCHIVO_PRINCIPAL = "data/libros.txt"
-    
-    if os.path.exists(ARCHIVO_PRINCIPAL):
-        try:
-            libros = {}
-            with open(ARCHIVO_PRINCIPAL, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        data = json.loads(line)
-                        libros[data["codigo"]] = LibroUsuario(**data)
-            print("✅ Réplica: Datos sincronizados desde GA principal")
-            return True
-        except Exception as e:
-            print(f"⚠️ Réplica: Error sincronizando con principal: {e}")
-    
-    # Si no hay principal, cargar desde réplica
+    libros = {}
+   
+    # La réplica siempre carga desde su archivo de réplica
     if os.path.exists(ARCHIVO_REPLICA):
         try:
-            libros = {}
             with open(ARCHIVO_REPLICA, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         data = json.loads(line)
                         libros[data["codigo"]] = LibroUsuario(**data)
-            print("✅ Réplica: Datos cargados desde archivo de réplica")
+            print("🔄 RÉPLICA: Datos cargados desde archivo de réplica")
             return True
         except Exception as e:
-            print(f"❌ Réplica: Error cargando réplica: {e}")
-    
+            print(f"❌ RÉPLICA: Error cargando réplica: {e}")
+   
     return False
 
-def verificar_principal_activo():
-    """Verifica si el GA principal está activo"""
-    try:
-        test_socket = context.socket(zmq.REQ)
-        test_socket.setsockopt(zmq.LINGER, 0)
-        test_socket.RCVTIMEO = 2000
-        test_socket.connect("tcp://localhost:5560")
-        test_socket.send_json({"operacion": "ping"})
-        test_socket.recv_json()
-        test_socket.close()
-        return True
-    except:
-        return False
-
-# Cargar datos iniciales
-if cargar_datos_desde_principal():
-    print("✅ Gestor de Almacenamiento Réplica listo (modo standby)")
+# Cargar datos al inicio
+if cargar_datos():
+    print("✅ Gestor de Almacenamiento RÉPLICA operativo en puerto 5561")
 else:
-    print("❌ Réplica: No se pudieron cargar datos iniciales")
+    print("❌ RÉPLICA: No se pudieron cargar datos")
     libros = {}
 
 def guardar_datos():
-    """Guarda los cambios en el archivo de réplica"""
+    """Guarda los cambios solo en la réplica."""
     with LOCK:
         try:
+            # Réplica solo guarda en su archivo
             with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
-            print("💾 Réplica: Datos guardados en archivo de réplica")
+                   
+            print("💾 RÉPLICA: Datos actualizados en réplica secundaria")
+           
         except Exception as e:
-            print(f"❌ Réplica: Error guardando datos: {e}")
+            print(f"❌ RÉPLICA: Error crítico guardando datos: {e}")
 
-# ================================
-#        LOOP PRINCIPAL
-# ================================
+print("🔄 GA Réplica iniciado en 10.43.102.150:5561 - Esperando failover...")
+
 while True:
-    # Verificar si debemos activarnos como primarios
-    principal_activo = verificar_principal_activo()
-    
-    if not principal_activo and not REPLICA_ACTIVA:
-        REPLICA_ACTIVA = True
-        print("🔄 FALLOVER AUTOMÁTICO: Réplica secundaria ACTIVADA como primaria")
-        print("📍 Ahora operando desde Sede B - Servicio continuo garantizado")
-    
-    elif principal_activo and REPLICA_ACTIVA:
-        REPLICA_ACTIVA = False
-        print("🔙 Retornando a modo standby - GA principal recuperado")
-        # Resincronizar datos desde principal
-        cargar_datos_desde_principal()
-    
     try:
-        # Solo procesar solicitudes si estamos activos o el principal está caído
-        if not principal_activo or REPLICA_ACTIVA:
-            socket.RCVTIMEO = 1000  # Timeout corto para no bloquear
-            msg = socket.recv_json()
-            
-            op = msg.get("operacion")
-            codigo = msg.get("codigo")
-            data = msg.get("data")
+        msg = socket.recv_json()
+        op = msg.get("operacion")
+        codigo = msg.get("codigo")
+        data = msg.get("data")
 
-            if REPLICA_ACTIVA:
-                print(f"📍 Réplica Activa procesando: {op} -> {codigo}")
-
-            # -------- LEER --------
-            if op == "leer":
-                libro = libros.get(codigo)
-                if libro:
-                    socket.send_json({"status": "ok", "libro": libro.to_dict()})
-                    if REPLICA_ACTIVA:
-                        print(f"📖 Réplica: Enviado libro {codigo}")
-                else:
-                    socket.send_json({"status": "error", "msg": "No encontrado"})
-
-            # ----- ACTUALIZAR -----
-            elif op == "actualizar":
-                if codigo in libros:
-                    for k, v in data.items():
-                        setattr(libros[codigo], k, v)
-                    guardar_datos()
-                    socket.send_json({"status": "ok", "msg": "Actualizado"})
-                    if REPLICA_ACTIVA:
-                        print(f"✅ Réplica: Libro {codigo} actualizado")
-                else:
-                    socket.send_json({"status": "error", "msg": "Código inexistente"})
-
-            elif op == "ping":
-                socket.send_json({"status": "ok", "msg": "pong"})
-
+        if op == "leer":
+            libro = libros.get(codigo)
+            if libro:
+                socket.send_json({"status": "ok", "libro": libro.to_dict(), "replica": not ES_PRIMARIO})
+                print(f"📖 RÉPLICA: Enviado libro {codigo}")
             else:
-                socket.send_json({"status": "error", "msg": "Operación inválida"})
+                socket.send_json({"status": "error", "msg": "No encontrado", "replica": not ES_PRIMARIO})
+                print(f"❌ RÉPLICA: Libro {codigo} no encontrado")
+
+        elif op == "actualizar":
+            if codigo in libros:
+                for k, v in data.items():
+                    setattr(libros[codigo], k, v)
+                guardar_datos()
+                socket.send_json({"status": "ok", "msg": "Actualizado", "replica": not ES_PRIMARIO})
+                print(f"✅ RÉPLICA: Libro {codigo} actualizado")
+            else:
+                socket.send_json({"status": "error", "msg": "Código inexistente", "replica": not ES_PRIMARIO})
+                print(f"⚠️ RÉPLICA: Código {codigo} inexistente")
+
         else:
-            # Modo standby - no procesar solicitudes
-            time.sleep(1)
-            
-    except zmq.Again:
-        # Timeout - continuar verificando estado
-        continue
+            socket.send_json({"status": "error", "msg": f"Operación '{op}' no válida", "replica": not ES_PRIMARIO})
+
     except Exception as e:
+        print(f"❌ RÉPLICA: Error: {e}")
         try:
-            socket.send_json({"status": "error", "msg": str(e)})
+            socket.send_json({"status": "error", "msg": str(e), "replica": not ES_PRIMARIO})
         except:
             pass
