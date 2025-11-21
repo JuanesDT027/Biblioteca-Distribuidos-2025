@@ -12,12 +12,12 @@ context = zmq.Context()
 
 # Socket SUB: recibe publicaciones del Gestor de Carga (GC)
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://10.43.102.150:5556")
+sub_socket.connect("tcp://192.168.10.10:5556")
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Renovacion")
 
 # Socket REQ: comunica con el Gestor de Almacenamiento (GA)
 ga_socket = context.socket(zmq.REQ)
-ga_socket.connect("tcp://10.43.102.150:5560")
+ga_socket.connect("tcp://192.168.10.10:5560")
 ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
 
 print("✅ Actor Renovación conectado al Gestor de Almacenamiento (GA)...")
