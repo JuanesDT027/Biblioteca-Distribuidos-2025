@@ -25,19 +25,22 @@ def conectar_ga():
     
     ga_socket = context.socket(zmq.REQ)
     ga_socket.setsockopt(zmq.LINGER, 0)
-    ga_socket.RCVTIMEO = 3000
-    ga_socket.SNDTIMEO = 3000
+    ga_socket.RCVTIMEO = 5000  # Aumentado a 5 segundos
+    ga_socket.SNDTIMEO = 5000
     
     try:
         ga_socket.connect(ga_actual)
+        print(f"🔗 Conectado a GA en {ga_actual}")
         return ga_socket
     except Exception as e:
         print(f"❌ Error conectando a GA en {ga_actual}: {e}")
         return None
 
 def operacion_ga(operacion, datos):
-    """Realiza operación en GA con failover"""
+    """Realiza operación en GA con failover - MEJORADA"""
     global ga_actual
+    
+    print(f"🔄 Ejecutando operación '{operacion}' en GA {ga_actual}")
     
     ga_socket = conectar_ga()
     if not ga_socket:
@@ -46,9 +49,11 @@ def operacion_ga(operacion, datos):
     try:
         datos["operacion"] = operacion
         ga_socket.send_json(datos)
+        print(f"📤 Enviado a GA: {datos}")
         
         try:
             respuesta = ga_socket.recv_json()
+            print(f"📥 Respuesta GA: {respuesta}")
             return respuesta
             
         except zmq.Again:
@@ -61,18 +66,23 @@ def operacion_ga(operacion, datos):
                 ga_socket.close()
                 
                 # Reintentar con réplica
+                print(f"🔄 Reintentando operación en réplica {ga_actual}...")
                 ga_socket = conectar_ga()
                 if ga_socket:
                     ga_socket.send_json(datos)
                     try:
                         respuesta = ga_socket.recv_json()
+                        print(f"📥 Respuesta Réplica: {respuesta}")
                         return respuesta
                     except zmq.Again:
                         return {"status": "error", "msg": "Timeout en réplica también"}
+                else:
+                    return {"status": "error", "msg": "No se pudo conectar a la réplica"}
             else:
                 return {"status": "error", "msg": "Timeout en réplica secundaria"}
                 
     except Exception as e:
+        print(f"❌ Error de comunicación con GA: {e}")
         return {"status": "error", "msg": f"Error de comunicación: {str(e)}"}
     finally:
         if ga_socket:
@@ -96,6 +106,7 @@ while True:
 
         operacion = mensaje.get("operacion")
         codigo = mensaje.get("codigo")
+        failover_activo = mensaje.get("failover_activo", False)
 
         if operacion != "prestamo":
             rep_socket.send_json({"status": "error", "msg": f"Operación inválida: {operacion}"})
@@ -106,11 +117,13 @@ while True:
             continue
 
         print(f"📚 Procesando préstamo para código: {codigo}")
+        if failover_activo:
+            print("🔄 FAILOVER ACTIVO - Usando réplica secundaria")
 
         # ===============================
         #   PASO 1: Leer libro en GA (con failover)
         # ===============================
-        print(f"➡ Solicitando libro al GA en {ga_actual}...")
+        print(f"➡ Solicitando libro al GA...")
         respuesta = operacion_ga("leer", {"codigo": codigo})
         
         if respuesta["status"] != "ok":
@@ -125,7 +138,7 @@ while True:
             continue
 
         libro = LibroUsuario(**respuesta["libro"])
-        print(f"✅ Libro obtenido: {libro.titulo}")
+        print(f"✅ Libro obtenido: {libro.titulo} - Ejemplares: {libro.ejemplares_disponibles}")
 
         # ===============================
         #   PASO 2: Validar disponibilidad

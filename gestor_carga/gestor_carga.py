@@ -64,7 +64,7 @@ print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
 print(f"📡 Conectando a Actor Préstamo en: {ACTOR_PRESTAMO_IP}")
 
 # ======================================================
-#   FUNCIONES DE FAILOVER
+#   FUNCIONES DE FAILOVER - CORREGIDAS
 # ======================================================
 
 def conectar_ga():
@@ -84,7 +84,7 @@ def conectar_ga():
         return None
 
 def verificar_disponibilidad_ga():
-    """Verifica si el GA actual está disponible"""
+    """Verifica si el GA actual está disponible - CORREGIDA"""
     global ga_actual
     
     ga_socket = conectar_ga()
@@ -92,26 +92,39 @@ def verificar_disponibilidad_ga():
         return False
     
     try:
-        # Enviar ping al GA
-        ga_socket.send_json({"operacion": "leer", "codigo": "TEST"})
-        ga_socket.recv_json()
+        # Enviar ping al GA con un libro que SÍ existe
+        # Usar un código que probablemente exista, como L0001
+        ga_socket.send_json({"operacion": "leer", "codigo": "L0001"})
+        respuesta = ga_socket.recv_json()
+        
+        # El GA está disponible si responde (aunque el libro no exista)
+        # Lo importante es que responde, no el contenido de la respuesta
+        print(f"✅ GA {ga_actual} está disponible")
         return True
-    except:
+        
+    except zmq.Again:
+        print(f"⏰ Timeout - GA {ga_actual} no responde")
+        return False
+    except Exception as e:
+        print(f"⚠️ Error verificando GA {ga_actual}: {e}")
         return False
     finally:
         if ga_socket:
             ga_socket.close()
 
 def realizar_failover_si_necesario():
-    """Realiza failover automático si el GA primario no responde"""
+    """Realiza failover automático si el GA primario no responde - CORREGIDA"""
     global ga_actual
     
     if ga_actual == GA_PRIMARIO:
+        print(f"🔍 Verificando disponibilidad del GA primario...")
         if not verificar_disponibilidad_ga():
             print("🔄 DETECTANDO FALLO DEL GA PRIMARIO - INICIANDO FALLOVER...")
             ga_actual = GA_REPLICA
             print("✅ FAILOVER COMPLETADO - Usando RÉPLICA SECUNDARIA")
             return True
+        else:
+            print("✅ GA Primario está disponible")
     return False
 
 # ======================================================
@@ -200,7 +213,7 @@ while True:
         try:
             prestamo_socket = context.socket(zmq.REQ)
             prestamo_socket.setsockopt(zmq.LINGER, 0)
-            prestamo_socket.RCVTIMEO = 5000
+            prestamo_socket.RCVTIMEO = 10000  # Aumentado a 10 segundos
             prestamo_socket.SNDTIMEO = 5000
             
             # CORRECCIÓN: Conectar a la IP del PC local donde está el actor préstamo
@@ -225,7 +238,7 @@ while True:
                 
                 rep_socket.send_json(respuesta)
             except zmq.Again:
-                error_msg = "Timeout actor préstamo"
+                error_msg = "Timeout actor préstamo - No respondió en 10 segundos"
                 if replica_utilizada:
                     error_msg += " [Intentado en RÉPLICA SECUNDARIA]"
                 print(f"⏰ {error_msg}")
