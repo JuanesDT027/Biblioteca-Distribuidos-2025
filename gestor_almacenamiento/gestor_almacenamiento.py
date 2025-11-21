@@ -18,7 +18,7 @@ libros = {}
 def cargar_datos():
     global libros
     libros = {}
-    
+   
     # Primero intentar cargar desde archivo principal
     if os.path.exists(ARCHIVO_PRINCIPAL):
         try:
@@ -31,7 +31,7 @@ def cargar_datos():
             return True
         except Exception as e:
             print(f"⚠️ Error cargando archivo principal: {e}")
-    
+   
     # Si falla, cargar desde réplica secundaria
     if os.path.exists(ARCHIVO_REPLICA):
         try:
@@ -45,7 +45,7 @@ def cargar_datos():
             return True
         except Exception as e:
             print(f"❌ Error cargando réplica secundaria: {e}")
-    
+   
     return False
 
 # Cargar datos al inicio
@@ -63,18 +63,18 @@ def guardar_datos():
             with open(ARCHIVO_PRINCIPAL, "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
-            
+           
             # Replicar en archivo secundario
             with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:
                 for l in libros.values():
                     f.write(json.dumps(l.to_dict()) + "\n")
-                    
+                   
             print("💾 Datos actualizados correctamente en archivo principal y réplica")
-            
+           
         except Exception as e:
             print(f"⚠️ Error guardando en archivo principal: {e}")
             print("🔄 Intentando guardar solo en réplica secundaria...")
-            
+           
             try:
                 # Fallback: guardar solo en réplica
                 with open(ARCHIVO_REPLICA, "w", encoding="utf-8") as f:

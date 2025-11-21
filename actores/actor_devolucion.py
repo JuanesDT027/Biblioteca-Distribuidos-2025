@@ -4,13 +4,12 @@ import time
 from common.LibroUsuario import LibroUsuario
 
 context = zmq.Context()
-
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://localhost:5556")  # GC (PUB)
+sub_socket.connect("tcp://10.43.102.150:5556")
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Devolucion")
 
 ga_socket = context.socket(zmq.REQ)
-ga_socket.connect("tcp://localhost:5560")  # GA
+ga_socket.connect("tcp://10.43.102.150:5560")
 ga_socket.RCVTIMEO = 5000
 
 print("✅ Actor Devolución conectado al Gestor de Almacenamiento (GA)...")

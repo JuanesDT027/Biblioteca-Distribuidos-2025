@@ -19,7 +19,7 @@ ga_socket = context.socket(zmq.REQ)
 ga_socket.setsockopt(zmq.LINGER, 0)
 ga_socket.RCVTIMEO = 5000
 ga_socket.SNDTIMEO = 5000
-ga_socket.connect("tcp://localhost:5560")
+ga_socket.connect("tcp://10.43.102.150:5560")
 
 print("✅ Actor Préstamo iniciado y conectado al GA...\n")
 
