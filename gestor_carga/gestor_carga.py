@@ -9,7 +9,6 @@ from common.LibroUsuario import LibroUsuario
 
 # ======================================================
 #                CONFIGURACIÓN DEL MODO
-#     Cambia SOLO esta variable para elegir el tipo
 # ======================================================
 
 # MODO_METRICAS = "multihilo"
@@ -92,13 +91,11 @@ def verificar_disponibilidad_ga():
         return False
     
     try:
-        # Enviar ping al GA con un libro que SÍ existe
-        # Usar un código que probablemente exista, como L0001
-        ga_socket.send_json({"operacion": "leer", "codigo": "L0001"})
+        
+        ga_socket.send_json({"operacion": "ping", "mensaje": "health_check"})
         respuesta = ga_socket.recv_json()
         
-        # El GA está disponible si responde (aunque el libro no exista)
-        # Lo importante es que responde, no el contenido de la respuesta
+        # El GA está disponible si responde
         print(f"✅ GA {ga_actual} está disponible")
         return True
         
@@ -159,7 +156,6 @@ with open(NOMBRE_METRICAS, "w", newline="", encoding="utf-8") as f:
     ])
 
 print(f"📁 Guardando métricas en: {NOMBRE_METRICAS}")
-
 
 # ======================================================
 #                   BUCLE PRINCIPAL
