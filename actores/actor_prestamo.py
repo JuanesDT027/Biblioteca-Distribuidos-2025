@@ -45,6 +45,7 @@ def operacion_ga(operacion, datos):
     global ga_actual
     
     print(f"🔄 [DEBUG] Ejecutando operación '{operacion}' en GA {ga_actual}")
+    print(f"📦 [DEBUG] Datos a enviar al GA: {datos}")
     
     ga_socket = conectar_ga()
     if not ga_socket:
@@ -117,7 +118,7 @@ while True:
             continue
 
         operacion = mensaje.get("operacion")
-        codigo = mensaje.get("codigo")
+        codigo_recibido = mensaje.get("codigo")  # ✅ Variable renombrada para claridad
         failover_activo = mensaje.get("failover_activo", False)
 
         if operacion != "prestamo":
@@ -125,20 +126,24 @@ while True:
             rep_socket.send_json({"status": "error", "msg": f"Operación inválida: {operacion}"})
             continue
 
-        if codigo is None:
+        if codigo_recibido is None:
             print("❌ [MAIN] Mensaje inválido: falta 'codigo'")
             rep_socket.send_json({"status": "error", "msg": "Mensaje inválido: falta 'codigo'"})
             continue
 
-        print(f"📚 [MAIN] INICIANDO PROCESAMIENTO DE PRÉSTAMO para código: {codigo}")
+        print(f"📚 [MAIN] INICIANDO PROCESAMIENTO DE PRÉSTAMO para código: {codigo_recibido}")
+        print(f"🔍 [MAIN] Código recibido del GC: '{codigo_recibido}'")  # ✅ Log adicional para debug
         if failover_activo:
             print("🔄 [MAIN] FAILOVER ACTIVO - Usando réplica secundaria")
 
         # ===============================
-        #   PASO 1: Leer libro en GA (con failover)
+        #   PASO 1: Leer libro en GA (con failover) - CORREGIDO
         # ===============================
-        print(f"➡ [PASO 1] Solicitando libro '{codigo}' al GA...")
-        respuesta = operacion_ga("leer", {"codigo": codigo})
+        print(f"➡ [PASO 1] Solicitando libro '{codigo_recibido}' al GA...")
+        
+        # ✅ CORREGIDO: Usar el código recibido del GC, no uno hardcodeado
+        datos_lectura = {"codigo": codigo_recibido}
+        respuesta = operacion_ga("leer", datos_lectura)
         
         if respuesta["status"] != "ok":
             print(f"❌ [PASO 1] ERROR en lectura GA: {respuesta}")
@@ -155,6 +160,7 @@ while True:
 
         libro = LibroUsuario(**respuesta["libro"])
         print(f"✅ [PASO 1] Libro obtenido: {libro.titulo} - Ejemplares disponibles: {libro.ejemplares_disponibles}")
+        print(f"🔍 [PASO 1] Código del libro obtenido: {libro.codigo}")  # ✅ Verificar código
 
         # ===============================
         #   PASO 2: Validar disponibilidad
@@ -172,15 +178,16 @@ while True:
         print(f"✅ [PASO 2] Libro disponible - Ejemplares: {libro.ejemplares_disponibles}")
 
         # ===============================
-        #   PASO 3: Actualizar libro (con failover)
+        #   PASO 3: Actualizar libro (con failover) - CORREGIDO
         # ===============================
         print("➡ [PASO 3] Actualizando libro en GA...")
         libro.ejemplares_disponibles -= 1
         libro.prestado = True
         fecha_entrega = (datetime.now() + timedelta(weeks=2)).strftime("%Y-%m-%d")
 
+        # ✅ CORREGIDO: Usar el código recibido del GC para la actualización
         actualizar_msg = {
-            "codigo": codigo,
+            "codigo": codigo_recibido,
             "data": {
                 "ejemplares_disponibles": libro.ejemplares_disponibles,
                 "prestado": True,
