@@ -32,12 +32,15 @@ pub_socket = context.socket(zmq.PUB)
 pub_socket.bind("tcp://*:5556")
 
 # ======================================================
-# CONFIGURACIÓN FAILOVER GA
+# CONFIGURACIÓN FAILOVER GA Y CONEXIONES
 # ======================================================
 
 GA_PRIMARIO = "tcp://localhost:5560"
 GA_REPLICA = "tcp://localhost:5561"
 ga_actual = GA_PRIMARIO
+
+# IP del actor préstamo en PC local
+ACTOR_PRESTAMO_IP = "tcp://192.168.10.10:5557"
 
 # ======================================================
 # BASE DE DATOS SIMULADA
@@ -58,6 +61,7 @@ def cargar_libros():
 
 cargar_libros()
 print("✅ Gestor de Carga iniciado y listo para recibir solicitudes...")
+print(f"📡 Conectando a Actor Préstamo en: {ACTOR_PRESTAMO_IP}")
 
 # ======================================================
 #   FUNCIONES DE FAILOVER
@@ -198,7 +202,10 @@ while True:
             prestamo_socket.setsockopt(zmq.LINGER, 0)
             prestamo_socket.RCVTIMEO = 5000
             prestamo_socket.SNDTIMEO = 5000
-            prestamo_socket.connect("tcp://localhost:5557")
+            
+            # CORRECCIÓN: Conectar a la IP del PC local donde está el actor préstamo
+            prestamo_socket.connect(ACTOR_PRESTAMO_IP)
+            print(f"🔗 Conectado a Actor Préstamo en: {ACTOR_PRESTAMO_IP}")
 
             # Agregar información de failover al mensaje para el actor
             mensaje_prestamo = {"operacion": "prestamo", "codigo": codigo}
@@ -206,9 +213,11 @@ while True:
                 mensaje_prestamo["failover_activo"] = True
 
             prestamo_socket.send_json(mensaje_prestamo)
+            print(f"📤 Enviando préstamo a actor: {mensaje_prestamo}")
 
             try:
                 respuesta = prestamo_socket.recv_json()
+                print(f"📥 Respuesta del actor préstamo: {respuesta}")
                 
                 # Agregar información de réplica si es necesario
                 if replica_utilizada and respuesta["status"] == "ok":
@@ -219,12 +228,14 @@ while True:
                 error_msg = "Timeout actor préstamo"
                 if replica_utilizada:
                     error_msg += " [Intentado en RÉPLICA SECUNDARIA]"
+                print(f"⏰ {error_msg}")
                 rep_socket.send_json({"status": "error", "msg": error_msg})
 
         except Exception as e:
             error_msg = str(e)
             if replica_utilizada:
                 error_msg += " [Intentado en RÉPLICA SECUNDARIA]"
+            print(f"❌ Error conectando con actor préstamo: {error_msg}")
             rep_socket.send_json({"status": "error", "msg": error_msg})
         finally:
             if prestamo_socket:
