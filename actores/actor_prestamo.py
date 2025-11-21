@@ -11,7 +11,7 @@ context = zmq.Context()
 
 # REP: recibe solicitudes del Gestor de Carga (en máquina virtual)
 rep_socket = context.socket(zmq.REP)
-rep_socket.bind("tcp://*:5557")  # Actor préstamo escucha en PC local
+rep_socket.bind("tcp://0.0.0.0:5557")  # Actor préstamo escucha en PC local
 rep_socket.setsockopt(zmq.LINGER, 0)
 
 # Configuración de GA primario y réplica (ambos en máquina virtual 10.43.102.150)
