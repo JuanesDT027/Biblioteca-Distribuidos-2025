@@ -39,7 +39,7 @@ GA_REPLICA = "tcp://localhost:5561"
 ga_actual = GA_PRIMARIO
 
 # IP del actor préstamo en PC local
-ACTOR_PRESTAMO_IP = "tcp://192.168.10.10:5557"
+ACTOR_PRESTAMO_IP = "tcp://10.157.102.196:5557"
 
 # ======================================================
 # BASE DE DATOS SIMULADA

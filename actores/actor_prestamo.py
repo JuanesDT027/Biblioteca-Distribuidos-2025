@@ -19,7 +19,7 @@ GA_PRIMARIO = "tcp://10.43.102.150:5560"
 GA_REPLICA = "tcp://10.43.102.150:5561"
 ga_actual = GA_PRIMARIO
 
-print("✅ Actor Préstamo iniciado en 192.168.10.10:5557")
+print("✅ Actor Préstamo iniciado en  10.157.102.196:5557")
 print("📡 Conectado a GA en 10.43.102.150 - Listo para solicitudes...\n")
 
 def conectar_ga():
