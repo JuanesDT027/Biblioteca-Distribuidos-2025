@@ -81,7 +81,7 @@ while True:
                     setattr(libros[codigo], k, v)
                 guardar_datos()
                 socket.send_json({"status": "ok", "msg": "Actualizado"})
-                print(f"✅ GA Principal: Libro {codigo} actualizado")
+                print(f"✅ Libro {codigo} actualizado")
             else:
                 socket.send_json({"status": "error", "msg": "Código inexistente"})
                 print(f"⚠️ GA Principal: Código {codigo} inexistente")

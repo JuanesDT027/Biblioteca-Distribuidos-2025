@@ -6,13 +6,13 @@ from common.LibroUsuario import LibroUsuario
 
 context = zmq.Context()
 sub_socket = context.socket(zmq.SUB)
-sub_socket.connect("tcp://10.43.102.150:5556")
+sub_socket.connect("tcp://localhost:5556")  # Puerto del GC (PUB)
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "Renovacion")
 
-# Sockets para GA principal y réplica
-ga_socket_principal = context.socket(zmq.REQ)
-ga_socket_principal.connect("tcp://10.43.102.150:5560")
-ga_socket_principal.RCVTIMEO = 3000
+# Socket REQ: comunica con el Gestor de Almacenamiento (GA)
+ga_socket = context.socket(zmq.REQ)
+ga_socket.connect("tcp://localhost:5560")  # Puerto del GA
+ga_socket.RCVTIMEO = 5000  # Timeout de 5 segundos
 
 ga_socket_replica = context.socket(zmq.REQ)
 ga_socket_replica.connect("tcp://10.43.102.150:5561")
