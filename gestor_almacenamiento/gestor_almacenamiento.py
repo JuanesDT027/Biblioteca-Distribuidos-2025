@@ -123,6 +123,17 @@ while True:
 
         print(f"🔍 Operación: {op}, Código solicitado: '{codigo}'")
 
+        # ✅ OPERACIÓN PING - PARA HEALTH CHECK
+        if op == "ping":
+            respuesta = {
+                "status": "ok", 
+                "msg": "pong", 
+                "replica": not ES_PRIMARIO
+            }
+            socket.send_json(respuesta)
+            print(f"🏓 Ping recibido - Respondiendo desde {'RÉPLICA' if not ES_PRIMARIO else 'PRIMARIO'}")
+            continue
+
         if op == "leer":
             if not codigo:
                 error_msg = "Código no proporcionado en operación 'leer'"
